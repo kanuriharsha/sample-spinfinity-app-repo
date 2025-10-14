@@ -4,7 +4,7 @@
     "slug": "spin-and-win-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/spinfinity-logo.jpeg",
+    "icon": "./assets/images/spinfinity-logo.png",
     "scheme": "Spinfinity Analytics",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -27,14 +27,14 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/spinfinity-logo.jpeg"
+      "favicon": "./assets/images/spinfinity-logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/spinfinity-logo.jpeg",
+          "image": "./assets/images/spinfinity-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#FC8019",
