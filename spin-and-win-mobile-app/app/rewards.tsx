@@ -140,10 +140,10 @@ export default function Rewards() {
 
   const getFilterLabel = (filter: TimeFilter): string => {
     switch (filter) {
-      case 'today': return "Today's Rewards";
-      case 'yesterday': return 'Yesterday';
-      case 'thisMonth': return 'This Month';
-      case 'lastMonth': return 'Last Month';
+      case 'today': return "";
+      case 'yesterday': return '';
+      case 'thisMonth': return '';
+      case 'lastMonth': return '';
       default: return 'All Time';
     }
   };

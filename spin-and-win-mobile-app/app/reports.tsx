@@ -103,23 +103,45 @@ export default function Reports() {
         const weKey = localDateKey(endOfISOWeek(now));
 
         let summarySeries: any[] = [];
+        let customersCount = 0;
+        
         if (selectedPeriod === 'daily') {
-          summarySeries = (data.dailyFinancial || []).filter((r: any) => String(r.day) === todayKeyLocal);
+          // For daily: use topDaily data directly
+          if (data.topDaily) {
+            setTotalRevenue(data.topDaily.sales || 0);
+            setTotalSpins(data.topDaily.spins || 0);
+            setTotalCustomers(data.topDaily.customers || 0);
+            setAvgOrderValue(data.topDaily.customers > 0 ? (data.topDaily.sales || 0) / data.topDaily.customers : 0);
+          } else {
+            setTotalRevenue(0);
+            setTotalSpins(0);
+            setTotalCustomers(0);
+            setAvgOrderValue(0);
+          }
         } else if (selectedPeriod === 'weekly') {
+          // For weekly: sum daily data for this week
           summarySeries = (data.dailyFinancial || []).filter((r: any) => String(r.day) >= wsKey && String(r.day) <= weKey);
+          const revenue = summarySeries.reduce((sum, r: any) => sum + Number(r?.sales || 0), 0);
+          const spins = summarySeries.reduce((sum, r: any) => sum + Number(r?.spins || 0), 0);
+          customersCount = summarySeries.reduce((sum, r: any) => sum + Number(r?.customers || 0), 0);
+
+          setTotalRevenue(revenue);
+          setTotalSpins(spins);
+          setTotalCustomers(customersCount);
+          setAvgOrderValue(customersCount > 0 ? revenue / customersCount : 0);
         } else {
+          // For monthly: use current month from monthlyFinancial
           const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
           summarySeries = (data.monthlyFinancial || []).filter((r: any) => String(r.month) === monthKey);
+          const revenue = summarySeries.reduce((sum, r: any) => sum + Number(r?.sales || 0), 0);
+          const spins = summarySeries.reduce((sum, r: any) => sum + Number(r?.spins || 0), 0);
+          customersCount = summarySeries.reduce((sum, r: any) => sum + Number(r?.customers || 0), 0);
+
+          setTotalRevenue(revenue);
+          setTotalSpins(spins);
+          setTotalCustomers(customersCount);
+          setAvgOrderValue(customersCount > 0 ? revenue / customersCount : 0);
         }
-
-        const revenue = summarySeries.reduce((sum, r: any) => sum + Number(r?.sales || 0), 0);
-        const spins = summarySeries.reduce((sum, r: any) => sum + Number(r?.spins || 0), 0);
-        const customers = summarySeries.reduce((sum, r: any) => sum + Number(r?.customers || 0), 0);
-
-        setTotalRevenue(revenue);
-        setTotalSpins(spins);
-        setTotalCustomers(customers);
-        setAvgOrderValue(customers > 0 ? revenue / customers : 0);
       } catch (e: any) {
         console.error('Reports error:', e);
         const msg = String(e?.message || '');

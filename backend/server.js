@@ -551,6 +551,7 @@ const analyticsHandler = async (req, res) => {
       ...discountPrep,
       ...prizeAmountPrep,
       { $addFields: { dayKey: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
+      { $match: { dayKey: currentDayKey } }, // ADDED: Filter to today only
       {
         $group: {
           _id: null,
@@ -575,6 +576,24 @@ const analyticsHandler = async (req, res) => {
     ]).toArray();
     const customersToday = uniqueTodayAgg[0]?.count || 0;
 
+    // NEW: Recent spins today with time and winner
+    const recentSpinsToday = await SpinResults.aggregate([
+      ...base,
+      { $addFields: { dayKey: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
+      { $match: { dayKey: currentDayKey } },
+      { $sort: { ts: -1 } },
+      { $limit: 10 },
+      {
+        $project: {
+          _id: 0,
+          customerName: { $trim: { input: { $concat: [{ $ifNull: ['$name', ''] }, ' ', { $ifNull: ['$surname', ''] }] } } },
+          winner: { $ifNull: ['$winner', '$result'] },
+          spinTime: '$ts',
+          prizeAmount: { $ifNull: ['$prizeAmount', '0'] },
+        },
+      },
+    ]).toArray();
+
     const topDaily = {
       customers: customersToday,
       spins: todayRoll.spins || 0,
@@ -582,6 +601,7 @@ const analyticsHandler = async (req, res) => {
       discounts: todayRoll.discounts || 0,
       prizeAmount: todayRoll.prizeAmount || 0,
       income: Math.max(0, (todayRoll.sales || 0) - (todayRoll.discounts || 0)),
+      recentSpins: recentSpinsToday, // NEW
     };
 
     // Financial rollups (day/week/month) for charts

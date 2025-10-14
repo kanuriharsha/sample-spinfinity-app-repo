@@ -32,11 +32,20 @@ export default function Dashboard() {
   const [todayRevenue, setTodayRevenue] = useState(0);
   const [todayReturningCustomers, setTodayReturningCustomers] = useState(0);
   const [todayPrizeAmount, setTodayPrizeAmount] = useState(0);
+  const [recentSpins, setRecentSpins] = useState<Array<{ customerName: string; winner: string; spinTime: string; prizeAmount: string }>>([]); // NEW
 
   // Add: hamburger menu state (overlay) and query for search
   const [menuOpen, setMenuOpen] = useState(false);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // Detect user timezone
+
+  // Add: periodic refresh every 60 seconds for real-time updates
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000); // 60 seconds
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -51,8 +60,14 @@ export default function Dashboard() {
 
       try {
         setLoading(true);
-        // Get analytics for today only (1 day range)
-        const data = await fetchAnalytics({ apiUrl, creds, query: { rangeDays: 1 } });
+        // Get analytics for today only with timezone
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const data = await fetchAnalytics({ 
+          apiUrl, 
+          creds, 
+          query: { from: startOfToday.toISOString(), to: now.toISOString(), tz } 
+        });
         
         // Use topDaily for today's metrics
         const todayData = data.topDaily;
@@ -61,6 +76,7 @@ export default function Dashboard() {
           setTodayCustomers(todayData.customers || 0);
           setTodayRevenue(todayData.sales || 0);
           setTodayPrizeAmount(todayData.prizeAmount || 0);
+          setRecentSpins(todayData.recentSpins || []); // NEW
           // Calculate returning customers from total analytics
           const totalReturning = data.returningVisitors || 0;
           const totalUnique = data.uniqueVisitors || 0;
@@ -74,6 +90,7 @@ export default function Dashboard() {
           setTodayRevenue(0);
           setTodayPrizeAmount(0);
           setTodayReturningCustomers(0);
+          setRecentSpins([]); // NEW
         }
       } catch (e: any) {
         console.error('Analytics error:', e);
@@ -88,8 +105,8 @@ export default function Dashboard() {
         setLoading(false);
       }
     })();
-    // Add reloadKey dependency so pressing Refresh re-runs the effect
-  }, [apiUrl, router, reloadKey]);
+    // Add reloadKey and refreshTick dependencies for manual and periodic refresh
+  }, [apiUrl, router, reloadKey, refreshTick, tz]);
 
   const logout = async () => {
     await AsyncStorage.multiRemove(['auth_creds', 'auth_user']);
@@ -120,9 +137,23 @@ export default function Dashboard() {
   // Add: simple refresh handler
   const onRefresh = () => setReloadKey((k) => k + 1);
 
+  // Helper to format spin time
+  const formatSpinTime = (timeStr: string) => {
+    try {
+      const date = new Date(timeStr);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    } catch {
+      return 'N/A';
+    }
+  };
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[scheme].background }]}>
-      {/* ...existing code... */}
+      {/* ...existing header code... */}
       <LinearGradient
         colors={scheme === 'dark' ? ['#0B1220', '#1E293B'] : ['#7C3AED', '#06B6D4']}
         start={{ x: 0, y: 0 }}
@@ -174,6 +205,8 @@ export default function Dashboard() {
             <ThemedText style={styles.premiumDate}>{todayLabel}</ThemedText>
             <ThemedText style={styles.premiumUser}>{user?.username || 'User'}</ThemedText>
           </View>
+          
+          {/* ...existing premium grid cards... */}
           <View style={styles.premiumGrid}>
             <View style={styles.premiumCard}>
               <ThemedText style={styles.premiumIcon}>↻</ThemedText>
@@ -196,6 +229,8 @@ export default function Dashboard() {
               <ThemedText style={styles.premiumLabel}>Returning Today</ThemedText>
             </View>
           </View>
+          
+          {/* ...existing performance card... */}
           <View style={styles.premiumActivityCard}>
             <ThemedText style={styles.premiumActivityTitle}>Today's Performance</ThemedText>
             <View style={styles.performanceRow}>
@@ -215,11 +250,48 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
+
+          {/* NEW: Recent Spins Section */}
+          {recentSpins.length > 0 && (
+            <View style={styles.recentSpinsCard}>
+              <View style={styles.recentSpinsHeader}>
+                <ThemedText style={styles.recentSpinsTitle}>🎰 Recent Spins Today</ThemedText>
+                <ThemedText style={styles.recentSpinsCount}>{recentSpins.length} spins</ThemedText>
+              </View>
+              
+              <View style={styles.recentSpinsList}>
+                {recentSpins.map((spin, index) => (
+                  <View key={index} style={styles.recentSpinItem}>
+                    <View style={styles.spinLeftSection}>
+                      <ThemedText style={styles.spinCustomerName}>
+                        {spin.customerName || 'Guest'}
+                      </ThemedText>
+                      <ThemedText style={styles.spinTime}>
+                        {formatSpinTime(spin.spinTime)}
+                      </ThemedText>
+                    </View>
+                    
+                    <View style={styles.spinRightSection}>
+                      <ThemedText style={styles.spinWinner} numberOfLines={1}>
+                        {spin.winner || 'No Prize'}
+                      </ThemedText>
+                      <ThemedText style={styles.spinPrizeAmount}>
+                        {spin.prizeAmount && spin.prizeAmount !== '0' ? spin.prizeAmount : '—'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
+      
       {/* Bottom Navigation */}
       <BottomNavigation activeTab="dashboard" />
+      
       {/* ...existing drawer code... */}
       {menuOpen && (
         <View style={styles.overlayRoot} pointerEvents="box-none">
@@ -268,10 +340,7 @@ export default function Dashboard() {
   );
 }
 
-
-
 const styles = StyleSheet.create({
-
   chevronPremium: {
     fontSize: 22,
     color: '#FFB300',
@@ -534,4 +603,82 @@ const styles = StyleSheet.create({
   },
   dailyLabel: { fontSize: 12, fontWeight: '700', color: '#94A3B8', marginBottom: 6 },
   dailyValue: { fontSize: 24, fontWeight: '900', color: '#E2E8F0' },
+
+  // NEW: Recent Spins Styles
+  recentSpinsCard: {
+    backgroundColor: '#181818',
+    borderRadius: 18,
+    padding: 18,
+    marginTop: 8,
+    borderWidth: 1.5,
+    borderColor: '#FFB300',
+    shadowColor: '#FFB300',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  recentSpinsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recentSpinsTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  recentSpinsCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFB300',
+    backgroundColor: 'rgba(255,179,0,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  recentSpinsList: {
+    gap: 10,
+  },
+  recentSpinItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0F0F0F',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  spinLeftSection: {
+    flex: 1,
+    marginRight: 12,
+  },
+  spinCustomerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  spinTime: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  spinRightSection: {
+    alignItems: 'flex-end',
+  },
+  spinWinner: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4ECDC4',
+    marginBottom: 4,
+    maxWidth: 120,
+  },
+  spinPrizeAmount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFB300',
+  },
 });

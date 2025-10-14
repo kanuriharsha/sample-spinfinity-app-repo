@@ -37,7 +37,7 @@ export type Customer = {
   lastVisit: string;
   firstVisit: string;
   lastPrize: string;
-  lastPrizeAmount: number | string; // was string
+  lastPrizeAmount: number | string;
   userAgent: string;
   ipAddress: string;
   customerType: 'New' | 'Returning' | 'Loyal';
@@ -153,7 +153,7 @@ async function parseJsonOrThrow(res: Response) {
 export async function fetchAnalytics(params: {
   apiUrl: string;
   creds: { username: string; password: string };
-  query?: { rangeDays?: number; from?: string; to?: string; tz?: string }; // added tz
+  query?: { rangeDays?: number; from?: string; to?: string; tz?: string };
 }): Promise<AnalyticsResponse> {
   const { apiUrl, creds, query } = params;
 
@@ -178,7 +178,7 @@ export async function fetchAnalytics(params: {
     if (query?.rangeDays) sp.set('rangeDays', String(query.rangeDays));
     if (query?.from) sp.set('from', query.from);
     if (query?.to) sp.set('to', query.to);
-    if (query?.tz) sp.set('tz', query.tz); // pass tz to server
+    if (query?.tz) sp.set('tz', query.tz);
 
     res = await fetch(`${apiUrl}/api/analytics${sp.toString() ? `?${sp.toString()}` : ''}`, {
       method: 'GET',
