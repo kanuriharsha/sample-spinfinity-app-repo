@@ -40,13 +40,6 @@ export default function Dashboard() {
   const apiUrl = useMemo(() => getApiUrl(), []);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // Detect user timezone
 
-  // Add: periodic refresh every 60 seconds for real-time updates
-  const [refreshTick, setRefreshTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000); // 60 seconds
-    return () => clearInterval(id);
-  }, []);
-
   useEffect(() => {
     (async () => {
       const credsRaw = await AsyncStorage.getItem('auth_creds');
@@ -105,8 +98,8 @@ export default function Dashboard() {
         setLoading(false);
       }
     })();
-    // Add reloadKey and refreshTick dependencies for manual and periodic refresh
-  }, [apiUrl, router, reloadKey, refreshTick, tz]);
+    // Add reloadKey dependency for manual refresh
+  }, [apiUrl, router, reloadKey, tz]);
 
   const logout = async () => {
     await AsyncStorage.multiRemove(['auth_creds', 'auth_user']);
@@ -209,7 +202,7 @@ export default function Dashboard() {
           {/* ...existing premium grid cards... */}
           <View style={styles.premiumGrid}>
             <View style={styles.premiumCard}>
-              <ThemedText style={styles.premiumIcon}>↻</ThemedText>
+              <ThemedText style={styles.premiumIcon}>🎯</ThemedText>
               <ThemedText style={styles.premiumValue}>{todaySpins}</ThemedText>
               <ThemedText style={styles.premiumLabel}>Today's Spins</ThemedText>
             </View>
@@ -255,7 +248,7 @@ export default function Dashboard() {
           {recentSpins.length > 0 && (
             <View style={styles.recentSpinsCard}>
               <View style={styles.recentSpinsHeader}>
-                <ThemedText style={styles.recentSpinsTitle}>🎰 Recent Spins Today</ThemedText>
+                <ThemedText style={styles.recentSpinsTitle}> Recent Spins Today</ThemedText>
                 <ThemedText style={styles.recentSpinsCount}>{recentSpins.length} spins</ThemedText>
               </View>
               

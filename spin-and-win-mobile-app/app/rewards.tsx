@@ -33,14 +33,7 @@ export default function Rewards() {
   const [totalRewardValue, setTotalRewardValue] = useState(0);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
-
-  // NEW: periodic refresh to keep "real-time" totals (today/yesterday/etc.)
-  const [refreshTick, setRefreshTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000); // refresh every 60s
-    return () => clearInterval(id);
-  }, []);
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   // Helpers to build date range per filter
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
@@ -126,7 +119,7 @@ export default function Rewards() {
         setLoading(false);
       }
     })();
-  }, [apiUrl, router, timeFilter, refreshTick, tz]); // include tz
+  }, [apiUrl, router, timeFilter, tz]); // REMOVED: refreshTick dependency
 
   const cleanRewardName = (name: string): string => {
     // Clean up reward names for better display

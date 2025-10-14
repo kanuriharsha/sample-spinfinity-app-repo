@@ -30,6 +30,7 @@ export default function Reports() {
   const [totalSpins, setTotalSpins] = useState(0);
   const [totalCustomers, setTotalCustomers] = useState(0);
   const [avgOrderValue, setAvgOrderValue] = useState(0);
+  const [totalRewardValue, setTotalRewardValue] = useState(0);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
@@ -95,6 +96,15 @@ export default function Reports() {
         setWeeklyFinancial((data.weeklyFinancial || []) as WeeklyFinancial[]);
         setMonthlyFinancial((data.monthlyFinancial || []) as MonthlyFinancial[]);
         setTopReturning((data.topReturning || []) as TopReturning[]);
+
+        // Calculate reward value from byResult data
+        const byResult = data.byResult || [];
+        const rewardValue = byResult.reduce((sum: number, item: any) => {
+          const occurrences = item.count || 0;
+          const prizeAmount = item.prizeAmount || 0;
+          return sum + (occurrences * prizeAmount);
+        }, 0);
+        setTotalRewardValue(rewardValue);
 
         // Summary tailored to selectedPeriod using tz-based keys
         const now = new Date();
@@ -233,18 +243,41 @@ export default function Reports() {
             </View>
           </View>
 
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryCard}>
-              <ThemedText style={styles.summaryIcon}>👥</ThemedText>
-              <ThemedText style={styles.summaryValue}>{totalCustomers}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>{periodLabel} Customers</ThemedText>
+          {/* Show Customers and Avg Order Value only for Daily view */}
+          {selectedPeriod === 'daily' && (
+            <>
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryCard}>
+                  <ThemedText style={styles.summaryIcon}>👥</ThemedText>
+                  <ThemedText style={styles.summaryValue}>{totalCustomers}</ThemedText>
+                  <ThemedText style={styles.summaryLabel}>{periodLabel} Customers</ThemedText>
+                </View>
+                <View style={styles.summaryCard}>
+                  <ThemedText style={styles.summaryIcon}>📈</ThemedText>
+                  <ThemedText style={styles.summaryValue}>₹{avgOrderValue.toFixed(0)}</ThemedText>
+                  <ThemedText style={styles.summaryLabel}>{periodLabel} Avg Order Value</ThemedText>
+                </View>
+              </View>
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryCard}>
+                  <ThemedText style={styles.summaryIcon}>🎁</ThemedText>
+                  <ThemedText style={styles.summaryValue}>₹{totalRewardValue.toFixed(0)}</ThemedText>
+                  <ThemedText style={styles.summaryLabel}>{periodLabel} Reward Value</ThemedText>
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* Show Reward Value for Weekly and Monthly views */}
+          {selectedPeriod !== 'daily' && (
+            <View style={styles.summaryGrid}>
+              <View style={styles.summaryCard}>
+                <ThemedText style={styles.summaryIcon}>🎁</ThemedText>
+                <ThemedText style={styles.summaryValue}>₹{totalRewardValue.toFixed(0)}</ThemedText>
+                <ThemedText style={styles.summaryLabel}>{periodLabel} Reward Value</ThemedText>
+              </View>
             </View>
-            <View style={styles.summaryCard}>
-              <ThemedText style={styles.summaryIcon}>📈</ThemedText>
-              <ThemedText style={styles.summaryValue}>₹{avgOrderValue.toFixed(0)}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>{periodLabel} Avg Order Value</ThemedText>
-            </View>
-          </View>
+          )}
 
           {/* Period Selector */}
           <View style={styles.periodSelector}>
@@ -290,10 +323,12 @@ export default function Reports() {
                       <ThemedText style={styles.statLabel}>Spins</ThemedText>
                       <ThemedText style={styles.statValue}>{spins}</ThemedText>
                     </View>
-                    <View style={styles.financialStat}>
-                      <ThemedText style={styles.statLabel}>Customers</ThemedText>
-                      <ThemedText style={styles.statValue}>{customers}</ThemedText>
-                    </View>
+                    {selectedPeriod === 'daily' && (
+                      <View style={styles.financialStat}>
+                        <ThemedText style={styles.statLabel}>Customers</ThemedText>
+                        <ThemedText style={styles.statValue}>{totalCustomers}</ThemedText>
+                      </View>
+                    )}
                     <View style={styles.financialStat}>
                       <ThemedText style={styles.statLabel}>Income</ThemedText>
                       <ThemedText style={[styles.statValue, { color: '#4ECDC4' }]}>₹{income.toFixed(0)}</ThemedText>

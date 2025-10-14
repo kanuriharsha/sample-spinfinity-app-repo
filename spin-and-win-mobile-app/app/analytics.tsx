@@ -30,44 +30,8 @@ export default function Analytics() {
   const [rangeDays, setRangeDays] = useState<number | undefined>(7);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // NEW: periodic refresh tick (real-time)
-  const [refreshTick, setRefreshTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000); // 60s
-    return () => clearInterval(id);
-  }, []);
-
-  // KPIs
-  const [total, setTotal] = useState(0);
-  const [uniqueVisitors, setUniqueVisitors] = useState(0);
-  const [returningVisitors, setReturningVisitors] = useState(0);
-  const [avgSpend, setAvgSpend] = useState(0);
-  const [totalSpend, setTotalSpend] = useState(0);
-  const [dwellAvg, setDwellAvg] = useState(0);
-
-  // Data
-  const [byResult, setByResult] = useState<Dist[]>([]);
-  const [byHour, setByHour] = useState<Hour[]>([]);
-  const [dayOfWeek, setDayOfWeek] = useState<DOW[]>([]);
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [topReturning, setTopReturning] = useState<TopReturning[]>([]);
-  const [dailyFinancial, setDailyFinancial] = useState<DailyFinancial[]>([]);
-  const [weeklyFinancial, setWeeklyFinancial] = useState<WeeklyFinancial[]>([]);
-  const [monthlyFinancial, setMonthlyFinancial] = useState<MonthlyFinancial[]>([]);
-
-  // Segment open state
-  const [open, setOpen] = useState<Record<string, boolean>>({
-    metrics: false,
-    rewards: false,
-    engagement: false,
-    financial: false,
-    growth: false,
-    spend: false,
-    summary: false,
-  });
-
   const apiUrl = useMemo(() => getApiUrl(), []);
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   useEffect(() => {
     (async () => {
@@ -110,8 +74,8 @@ export default function Analytics() {
         setLoading(false);
       }
     })();
-  // add refreshTick, keep existing deps
-  }, [apiUrl, router, rangeDays, reloadKey, refreshTick, tz]); // include tz
+  // REMOVED: refreshTick, keep existing deps
+  }, [apiUrl, router, rangeDays, reloadKey, tz]); // include tz
 
   const onRefresh = () => setReloadKey((k) => k + 1);
 

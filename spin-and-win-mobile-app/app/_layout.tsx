@@ -35,6 +35,8 @@ export default function RootLayout() {
         <Stack.Screen name="customers" options={{ headerShown: false }} />
         <Stack.Screen name="rewards" options={{ headerShown: false }} />
         <Stack.Screen name="reports" options={{ headerShown: false }} />
+        <Stack.Screen name="terms-of-service" options={{ headerShown: false }} />
+        <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
     </ThemeProvider>

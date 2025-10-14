@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity, View, Modal, Text, ScrollView } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -88,10 +88,6 @@ export default function LoginScreen() {
     }
   };
 
-  // Modal state for legal docs
-  const [showTerms, setShowTerms] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
-
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
       <LinearGradient
@@ -173,71 +169,21 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <ThemedText style={styles.footerSubText}>Powered by PEH Network Hub</ThemedText>
+          <ThemedText style={styles.footerSubText}>Idea Powered by PEH Network Hub</ThemedText>
           <ThemedText style={styles.footerSubText1}>Turning Spins into insights</ThemedText>
           <ThemedText style={styles.footerText}>Analytics Dashboard Version 1.0</ThemedText>
 
-          {/* Replaced inline Linking with modal-triggering underlined links */}
+          {/* Navigation links to Terms and Privacy pages */}
           <View style={styles.footerAgreement}>
             <Text style={styles.footerAgreementText}>
-              By tapping I accept the {''}
-              <Text style={styles.linkText} onPress={() => setShowTerms(true)}>Terms of Service</Text>
+              By tapping log in I accept the {''}
+              <Text style={styles.linkText} onPress={() => router.push('/terms-of-service')}>Terms of Service</Text>
               {' '} & {' '}
-              <Text style={styles.linkText} onPress={() => setShowPrivacy(true)}>Privacy Policy</Text>
+              <Text style={styles.linkText} onPress={() => router.push('/privacy-policy')}>Privacy Policy</Text>
             </Text>
           </View>
         </View>
       </KeyboardAvoidingView>
-
-      {/* Terms Modal */}
-      <Modal visible={showTerms} transparent animationType="fade" onRequestClose={() => setShowTerms(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Terms of Service</ThemedText>
-              <TouchableOpacity onPress={() => setShowTerms(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <ThemedText style={styles.modalClose}>✕</ThemedText>
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              style={styles.modalBody}
-              showsVerticalScrollIndicator
-              persistentScrollbar
-              contentContainerStyle={{ paddingBottom: 12 }}
-            >
-              <ThemedText style={styles.modalText}>
-                {/* ...Your Terms of Service content goes here... */}
-                These Terms of Service govern your use of the PEH Spinfinity Analytics application.
-              </ThemedText>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Privacy Modal */}
-      <Modal visible={showPrivacy} transparent animationType="fade" onRequestClose={() => setShowPrivacy(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Privacy Policy</ThemedText>
-              <TouchableOpacity onPress={() => setShowPrivacy(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <ThemedText style={styles.modalClose}>✕</ThemedText>
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              style={styles.modalBody}
-              showsVerticalScrollIndicator
-              persistentScrollbar
-              contentContainerStyle={{ paddingBottom: 12 }}
-            >
-              <ThemedText style={styles.modalText}>
-                {/* ...Your Privacy Policy content goes here... */}
-                This Privacy Policy describes how data is collected and processed in PEH Spinfinity Analytics.
-              </ThemedText>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </ThemedView>
   );
 }
