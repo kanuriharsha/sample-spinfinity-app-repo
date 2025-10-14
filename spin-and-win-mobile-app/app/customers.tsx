@@ -244,14 +244,14 @@ export default function Customers() {
                         {formatCurrency(spin.prizeAmount)}
                       </ThemedText>
                     </View>
-                    <View style={styles.spinStat}>
+                    {/* <View style={styles.spinStat}>
                       <ThemedText style={styles.spinStatLabel}>Net</ThemedText>
                       <ThemedText style={[styles.spinStatValue, { 
                         color: (spin.prizeAmount - spin.amountSpent) > 0 ? '#4ECDC4' : '#FF6B6B'
                       }]}>
                         {formatCurrency(spin.prizeAmount - spin.amountSpent)}
                       </ThemedText>
-                    </View>
+                    </View> */}
                   </View>
                 </View>
               ))}
@@ -261,7 +261,7 @@ export default function Customers() {
           </ScrollView>
         ) : null}
 
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation (safe-area aware) */}
         <BottomNavigation activeTab="customers" />
       </ThemedView>
     );
@@ -409,25 +409,8 @@ export default function Customers() {
         </ScrollView>
       )}
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNavBar}>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/dashboard')}>
-          <ThemedText style={styles.bottomNavIcon}>▦</ThemedText>
-          <ThemedText style={styles.bottomNavLabel}>Dashboard</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <ThemedText style={[styles.bottomNavIcon, styles.bottomNavIconActive]}>👥</ThemedText>
-          <ThemedText style={[styles.bottomNavLabel, styles.bottomNavLabelActive]}>Customers</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/rewards')}>
-          <ThemedText style={styles.bottomNavIcon}>🏆</ThemedText>
-          <ThemedText style={styles.bottomNavLabel}>Rewards</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/reports')}>
-          <ThemedText style={styles.bottomNavIcon}>📄</ThemedText>
-          <ThemedText style={styles.bottomNavLabel}>Reports</ThemedText>
-        </TouchableOpacity>
-      </View>
+      {/* Replace custom bar with shared BottomNavigation */}
+      <BottomNavigation activeTab="customers" />
     </ThemedView>
   );
 }
@@ -651,27 +634,4 @@ const styles = StyleSheet.create({
 
   noResultsContainer: { padding: 40, alignItems: 'center' },
   noResultsText: { fontSize: 16, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-
-  // Bottom Navigation
-  bottomNavBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#111',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-    paddingVertical: 6,
-    paddingBottom: Platform.OS === 'ios' ? 18 : 8,
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 100,
-    height: 62,
-  },
-  bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bottomNavIcon: { fontSize: 26, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
-  bottomNavIconActive: { color: '#FFB300', fontWeight: '900' },
-  bottomNavLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  bottomNavLabelActive: { color: '#FFB300', fontWeight: '900' },
 });

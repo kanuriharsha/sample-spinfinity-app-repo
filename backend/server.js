@@ -169,6 +169,7 @@ const analyticsHandler = async (req, res) => {
     }
     if (q.from) fromDate = new Date(q.from);
     if (q.to) toDate = new Date(q.to);
+    const tz = typeof q.tz === 'string' && q.tz ? q.tz : 'UTC'; // NEW: timezone from client
 
     // Build base pipeline: normalize route, compute timestamp, optional date filter, restrict to allowed routes, ensure route exists in login
     const base = [
@@ -265,10 +266,10 @@ const analyticsHandler = async (req, res) => {
       { $sort: { count: -1 } },
     ]).toArray();
 
-    // Daily activity
+    // Daily activity (apply tz)
     const byDay = await SpinResults.aggregate([
       ...base,
-      { $group: { _id: { $dateToString: { date: '$ts', format: '%Y-%m-%d' } }, count: { $sum: 1 } } },
+      { $group: { _id: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } }, count: { $sum: 1 } } },
       { $project: { _id: 0, day: '$_id', count: 1 } },
       { $sort: { day: 1 } },
     ]).toArray();
@@ -486,137 +487,11 @@ const analyticsHandler = async (req, res) => {
       { $addFields: { amountNum: { $convert: { input: '$_amountStr', to: 'double', onError: 0, onNull: 0 } } } },
     ];
 
-    // Helper: add visitor key for unique customers per period (null when unavailable)
-    const addCustKey = [
-      {
-        $addFields: {
-          __vk: {
-            $trim: {
-              input: {
-                $toLower: {
-                  $concat: [{ $ifNull: ['$name', ''] }, '|', { $ifNull: ['$surname', ''] }],
-                },
-              },
-            },
-          },
-        },
-      },
-      {
-        $addFields: {
-          _custKey: {
-            $cond: [{ $ne: ['$__vk', ''] }, '$__vk', null],
-          },
-        },
-      },
-    ];
-
-    // Daily financial summary
-    const dailyFinancial = await SpinResults.aggregate([
-      ...base,
-      ...amountPrep,
-      ...addCustKey,
-      {
-        $group: {
-          _id: { $dateToString: { date: '$ts', format: '%Y-%m-%d' } },
-          spins: { $sum: 1 },
-          sales: { $sum: '$amountNum' },
-          _custSet: { $addToSet: '$_custKey' },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          day: '$_id',
-          spins: 1,
-          sales: { $ifNull: ['$sales', 0] },
-          discount: { $literal: 0 },
-          income: { $ifNull: ['$sales', 0] }, // no discount field yet
-          customers: { $size: { $setDifference: ['$_custSet', [null]] } },
-        },
-      },
-      { $sort: { day: 1 } },
-    ]).toArray();
-
-    // Weekly financial summary (ISO week/year)
-    const weeklyFinancial = await SpinResults.aggregate([
-      ...base,
-      ...amountPrep,
-      ...addCustKey,
-      {
-        $group: {
-          _id: { y: { $isoWeekYear: '$ts' }, w: { $isoWeek: '$ts' } },
-          spins: { $sum: 1 },
-          sales: { $sum: '$amountNum' },
-          _custSet: { $addToSet: '$_custKey' },
-        },
-      },
-      {
-        $addFields: {
-          weekKey: {
-            $concat: [
-              { $toString: '$_id.y' },
-              '-W',
-              {
-                $cond: [
-                  { $lt: ['$_id.w', 10] },
-                  { $concat: ['0', { $toString: '$_id.w' }] },
-                  { $toString: '$_id.w' },
-                ],
-              },
-            ],
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          week: '$weekKey',
-          spins: 1,
-          sales: { $ifNull: ['$sales', 0] },
-          discount: { $literal: 0 },
-          income: { $ifNull: ['$sales', 0] },
-          customers: { $size: { $setDifference: ['$_custSet', [null]] } },
-        },
-      },
-      { $sort: { week: 1 } },
-    ]).toArray();
-
-    // Monthly financial summary (YYYY-MM)
-    const monthlyFinancial = await SpinResults.aggregate([
-      ...base,
-      ...amountPrep,
-      ...addCustKey,
-      {
-        $group: {
-          _id: { $dateToString: { date: '$ts', format: '%Y-%m' } },
-          spins: { $sum: 1 },
-          sales: { $sum: '$amountNum' },
-          _custSet: { $addToSet: '$_custKey' },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          month: '$_id',
-          spins: 1,
-          sales: { $ifNull: ['$sales', 0] },
-          discount: { $literal: 0 },
-          income: { $ifNull: ['$sales', 0] },
-          customers: { $size: { $setDifference: ['$_custSet', [null]] } },
-        },
-      },
-      { $sort: { month: 1 } },
-    ]).toArray();
-
-    // --- Top Daily Metrics (today in server local time) ---
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-
-    // Try to parse discount-like fields; default to 0 if absent
+    // Add: discount/prize preprocessors used in topDaily (parse to numbers)
     const discountPrep = [
       {
         $addFields: {
-          _discStr: {
+          _discountStr: {
             $trim: {
               input: {
                 $replaceAll: {
@@ -625,7 +500,7 @@ const analyticsHandler = async (req, res) => {
                       input: {
                         $ifNull: [
                           '$discount',
-                          { $ifNull: ['$discountAmount', { $ifNull: ['$offerDiscount', '0'] }] },
+                          { $ifNull: ['$discountGiven', { $ifNull: ['$couponAmount', '0'] }] },
                         ],
                       },
                       find: ',',
@@ -640,10 +515,9 @@ const analyticsHandler = async (req, res) => {
           },
         },
       },
-      { $addFields: { discountNum: { $convert: { input: '$_discStr', to: 'double', onError: 0, onNull: 0 } } } },
+      { $addFields: { discountNum: { $convert: { input: '$_discountStr', to: 'double', onError: 0, onNull: 0 } } } },
     ];
 
-    // Prize amount preparation for today
     const prizeAmountPrep = [
       {
         $addFields: {
@@ -669,13 +543,14 @@ const analyticsHandler = async (req, res) => {
       { $addFields: { prizeAmountNum: { $convert: { input: '$_prizeAmountStr', to: 'double', onError: 0, onNull: 0 } } } },
     ];
 
-    // Spins/Sales/Discounts/Prizes for today
+    // --- Top Daily Metrics using tz-safe dayKey ---
+    const currentDayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
     const todayRollupAgg = await SpinResults.aggregate([
       ...base,
-      { $match: { ts: { $gte: todayStart, $lte: todayEnd } } },
       ...amountPrep,
       ...discountPrep,
       ...prizeAmountPrep,
+      { $addFields: { dayKey: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
       {
         $group: {
           _id: null,
@@ -689,10 +564,10 @@ const analyticsHandler = async (req, res) => {
     ]).toArray();
     const todayRoll = todayRollupAgg[0] || { spins: 0, sales: 0, discounts: 0, prizeAmount: 0 };
 
-    // Unique customers today
     const uniqueTodayAgg = await SpinResults.aggregate([
       ...base,
-      { $match: { ts: { $gte: todayStart, $lte: todayEnd } } },
+      { $addFields: { dayKey: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
+      { $match: { dayKey: currentDayKey } },
       visitorKeyAdd,
       { $match: { __vk: { $ne: '' } } },
       { $group: { _id: '$__vk' } },
@@ -708,6 +583,90 @@ const analyticsHandler = async (req, res) => {
       prizeAmount: todayRoll.prizeAmount || 0,
       income: Math.max(0, (todayRoll.sales || 0) - (todayRoll.discounts || 0)),
     };
+
+    // Financial rollups (day/week/month) for charts
+    const financialBase = [...base, ...amountPrep, ...discountPrep];
+
+    const dailyFinancial = await SpinResults.aggregate([
+      ...financialBase,
+      { $addFields: { day: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
+      {
+        $group: {
+          _id: '$day',
+          spins: { $sum: 1 },
+          sales: { $sum: '$amountNum' },
+          discount: { $sum: '$discountNum' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          day: '$_id',
+          spins: 1,
+          sales: { $round: ['$sales', 2] },
+          discount: { $round: ['$discount', 2] },
+          income: { $round: [{ $subtract: ['$sales', '$discount'] }, 2] },
+        },
+      },
+      { $sort: { day: 1 } },
+      { $limit: 30 },
+    ]).toArray();
+
+    const weeklyFinancial = await SpinResults.aggregate([
+      ...financialBase,
+      {
+        $addFields: {
+          week: {
+            $dateToString: { date: '$ts', format: '%G-W%V', timezone: tz },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$week',
+          spins: { $sum: 1 },
+          sales: { $sum: '$amountNum' },
+          discount: { $sum: '$discountNum' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          week: '$_id',
+          spins: 1,
+          sales: { $round: ['$sales', 2] },
+          discount: { $round: ['$discount', 2] },
+          income: { $round: [{ $subtract: ['$sales', '$discount'] }, 2] },
+        },
+      },
+      { $sort: { week: 1 } },
+      { $limit: 26 },
+    ]).toArray();
+
+    const monthlyFinancial = await SpinResults.aggregate([
+      ...financialBase,
+      { $addFields: { month: { $dateToString: { date: '$ts', format: '%Y-%m', timezone: tz } } } },
+      {
+        $group: {
+          _id: '$month',
+          spins: { $sum: 1 },
+          sales: { $sum: '$amountNum' },
+          discount: { $sum: '$discountNum' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          month: '$_id',
+          spins: 1,
+          sales: { $round: ['$sales', 2] },
+          discount: { $round: ['$discount', 2] },
+          income: { $round: [{ $subtract: ['$sales', '$discount'] }, 2] },
+        },
+      },
+      { $sort: { month: 1 } },
+      { $limit: 12 },
+    ]).toArray();
 
     res.json({
       totalSpins,

@@ -30,6 +30,13 @@ export default function Analytics() {
   const [rangeDays, setRangeDays] = useState<number | undefined>(7);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // NEW: periodic refresh tick (real-time)
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000); // 60s
+    return () => clearInterval(id);
+  }, []);
+
   // KPIs
   const [total, setTotal] = useState(0);
   const [uniqueVisitors, setUniqueVisitors] = useState(0);
@@ -60,6 +67,7 @@ export default function Analytics() {
   });
 
   const apiUrl = useMemo(() => getApiUrl(), []);
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
 
   useEffect(() => {
     (async () => {
@@ -74,7 +82,7 @@ export default function Analytics() {
 
       try {
         setLoading(true);
-        const data = await fetchAnalytics({ apiUrl, creds, query: { rangeDays } });
+        const data = await fetchAnalytics({ apiUrl, creds, query: { rangeDays, tz } }); // pass tz
         setTotal(data.totalSpins || 0);
         setUniqueVisitors(data.uniqueVisitors || 0);
         setReturningVisitors(data.returningVisitors || 0);
@@ -102,7 +110,8 @@ export default function Analytics() {
         setLoading(false);
       }
     })();
-  }, [apiUrl, router, rangeDays, reloadKey]);
+  // add refreshTick, keep existing deps
+  }, [apiUrl, router, rangeDays, reloadKey, refreshTick, tz]); // include tz
 
   const onRefresh = () => setReloadKey((k) => k + 1);
 

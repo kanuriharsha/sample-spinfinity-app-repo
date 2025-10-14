@@ -20,7 +20,7 @@ type RewardAnalysis = {
   color: string;
 };
 
-type TimeFilter = 'today' | 'thisMonth' | 'lastMonth' | 'all';
+type TimeFilter = 'today' | 'yesterday' | 'thisMonth' | 'lastMonth' | 'all';
 
 export default function Rewards() {
   const router = useRouter();
@@ -33,6 +33,43 @@ export default function Rewards() {
   const [totalRewardValue, setTotalRewardValue] = useState(0);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
+
+  // NEW: periodic refresh to keep "real-time" totals (today/yesterday/etc.)
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000); // refresh every 60s
+    return () => clearInterval(id);
+  }, []);
+
+  // Helpers to build date range per filter
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  const buildQueryForFilter = (filter: TimeFilter) => {
+    const now = new Date();
+    if (filter === 'today') {
+      const from = startOfDay(now);
+      return { from: from.toISOString(), to: now.toISOString() };
+    }
+    if (filter === 'yesterday') {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const from = startOfDay(y);
+      const to = endOfDay(y);
+      return { from: from.toISOString(), to: to.toISOString() };
+    }
+    if (filter === 'thisMonth') {
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: thisMonthStart.toISOString(), to: now.toISOString() };
+    }
+    if (filter === 'lastMonth') {
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { from: lastMonthStart.toISOString(), to: lastMonthEnd.toISOString() };
+    }
+    // 'all' => no date constraints (all time)
+    return {};
+  };
 
   useEffect(() => {
     (async () => {
@@ -45,27 +82,8 @@ export default function Rewards() {
 
       try {
         setLoading(true);
-        
-        // Calculate date range based on filter
-        let query = {};
-        const now = new Date();
-        
-        if (timeFilter === 'today') {
-          query = { rangeDays: 1 };
-        } else if (timeFilter === 'thisMonth') {
-          const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          query = { from: thisMonthStart.toISOString() };
-        } else if (timeFilter === 'lastMonth') {
-          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-          query = { 
-            from: lastMonthStart.toISOString(),
-            to: lastMonthEnd.toISOString()
-          };
-        } else {
-          query = { rangeDays: 30 }; // All = last 30 days
-        }
-
+        // Build precise date range based on filter
+        const query = { ...buildQueryForFilter(timeFilter), tz }; // pass tz
         const data = await fetchAnalytics({ apiUrl, creds, query });
         
         const byResult = data.byResult || [];
@@ -75,7 +93,7 @@ export default function Rewards() {
         // Process rewards with actual prizeAmount from database
         const processedRewards: RewardAnalysis[] = byResult.map((item, index) => {
           const occurrences = item.count || 0;
-          const prizeAmount = item.prizeAmount || 0; // Use actual prizeAmount from database
+          const prizeAmount = item.prizeAmount || 0;
           const totalValue = occurrences * prizeAmount;
           const percentage = total > 0 ? (occurrences / total) * 100 : 0;
 
@@ -89,11 +107,9 @@ export default function Rewards() {
           };
         }).filter(reward => reward.occurrences > 0);
 
-        // Sort by total value descending
         processedRewards.sort((a, b) => b.totalValue - a.totalValue);
         setRewards(processedRewards);
 
-        // Calculate total reward value
         const totalValue = processedRewards.reduce((sum, reward) => sum + reward.totalValue, 0);
         setTotalRewardValue(totalValue);
 
@@ -110,7 +126,7 @@ export default function Rewards() {
         setLoading(false);
       }
     })();
-  }, [apiUrl, router, timeFilter]);
+  }, [apiUrl, router, timeFilter, refreshTick, tz]); // include tz
 
   const cleanRewardName = (name: string): string => {
     // Clean up reward names for better display
@@ -125,11 +141,23 @@ export default function Rewards() {
   const getFilterLabel = (filter: TimeFilter): string => {
     switch (filter) {
       case 'today': return "Today's Rewards";
+      case 'yesterday': return 'Yesterday';
       case 'thisMonth': return 'This Month';
       case 'lastMonth': return 'Last Month';
       default: return 'All Time';
     }
   };
+
+  // Short label for cards
+  const periodShort = useMemo(() => {
+    switch (timeFilter) {
+      case 'today': return 'Today';
+      case 'yesterday': return 'Yesterday';
+      case 'thisMonth': return 'This Month';
+      case 'lastMonth': return 'Last Month';
+      default: return 'All Time';
+    }
+  }, [timeFilter]);
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
@@ -164,7 +192,7 @@ export default function Rewards() {
           
           {/* Time Filter */}
           <View style={styles.filterContainer}>
-            {(['today', 'thisMonth', 'lastMonth', 'all'] as TimeFilter[]).map((filter) => (
+            {(['today', 'yesterday', 'thisMonth', 'lastMonth', 'all'] as TimeFilter[]).map((filter) => (
               <TouchableOpacity
                 key={filter}
                 onPress={() => setTimeFilter(filter)}
@@ -179,6 +207,7 @@ export default function Rewards() {
                   { textAlign: 'center' }
                 ]}>
                   {filter === 'today' ? 'Today' : 
+                   filter === 'yesterday' ? 'Yesterday' :
                    filter === 'thisMonth' ? 'This Month' :
                    filter === 'lastMonth' ? 'Last Month' : 'All Time'}
                 </ThemedText>
@@ -191,12 +220,12 @@ export default function Rewards() {
             <View style={styles.summaryCard}>
               <ThemedText style={styles.summaryIcon}>🎯</ThemedText>
               <ThemedText style={styles.summaryValue}>{totalSpins}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>Total Spins</ThemedText>
+              <ThemedText style={styles.summaryLabel}>Spins ({periodShort})</ThemedText>
             </View>
             <View style={styles.summaryCard}>
               <ThemedText style={styles.summaryIcon}>💰</ThemedText>
               <ThemedText style={styles.summaryValue}>₹{totalRewardValue}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>Reward Value</ThemedText>
+              <ThemedText style={styles.summaryLabel}>Reward Value ({periodShort})</ThemedText>
             </View>
           </View>
 

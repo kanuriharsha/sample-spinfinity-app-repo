@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity, View, Modal, Text, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -88,6 +88,10 @@ export default function LoginScreen() {
     }
   };
 
+  // Modal state for legal docs
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
       <LinearGradient
@@ -102,8 +106,10 @@ export default function LoginScreen() {
       >
         {/* Header */}
         <View style={styles.headerWrap}>
-          <ThemedText style={styles.title}>PEH Spinfinity</ThemedText>
-          <ThemedText style={styles.subtitle}>Analytics Dashboard</ThemedText>
+          {/* <ThemedText style={styles.title}>PEH Spinfinity</ThemedText> */}
+          <ThemedText style={styles.subtitle}>PEH Spinfinity Analytics</ThemedText>
+          <ThemedText style={styles.subtitle1}>Track. Analyze. Grow.</ThemedText>
+
         </View>
 
         {/* Card */}
@@ -160,16 +166,78 @@ export default function LoginScreen() {
             {submitting ? (
               <ActivityIndicator color="#000" size="small" />
             ) : (
-              <ThemedText style={styles.loginButtonText}>Sign In</ThemedText>
+              <ThemedText style={styles.loginButtonText}>Log In</ThemedText>
             )}
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>Powered by PEH Network Hub</ThemedText>
+          <ThemedText style={styles.footerSubText}>Powered by PEH Network Hub</ThemedText>
+          <ThemedText style={styles.footerSubText1}>Turning Spins into insights</ThemedText>
+          <ThemedText style={styles.footerText}>Analytics Dashboard Version 1.0</ThemedText>
+
+          {/* Replaced inline Linking with modal-triggering underlined links */}
+          <View style={styles.footerAgreement}>
+            <Text style={styles.footerAgreementText}>
+              By tapping I accept the {''}
+              <Text style={styles.linkText} onPress={() => setShowTerms(true)}>Terms of Service</Text>
+              {' '} & {' '}
+              <Text style={styles.linkText} onPress={() => setShowPrivacy(true)}>Privacy Policy</Text>
+            </Text>
+          </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Terms Modal */}
+      <Modal visible={showTerms} transparent animationType="fade" onRequestClose={() => setShowTerms(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Terms of Service</ThemedText>
+              <TouchableOpacity onPress={() => setShowTerms(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.modalBody}
+              showsVerticalScrollIndicator
+              persistentScrollbar
+              contentContainerStyle={{ paddingBottom: 12 }}
+            >
+              <ThemedText style={styles.modalText}>
+                {/* ...Your Terms of Service content goes here... */}
+                These Terms of Service govern your use of the PEH Spinfinity Analytics application.
+              </ThemedText>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Privacy Modal */}
+      <Modal visible={showPrivacy} transparent animationType="fade" onRequestClose={() => setShowPrivacy(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Privacy Policy</ThemedText>
+              <TouchableOpacity onPress={() => setShowPrivacy(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.modalBody}
+              showsVerticalScrollIndicator
+              persistentScrollbar
+              contentContainerStyle={{ paddingBottom: 12 }}
+            >
+              <ThemedText style={styles.modalText}>
+                {/* ...Your Privacy Policy content goes here... */}
+                This Privacy Policy describes how data is collected and processed in PEH Spinfinity Analytics.
+              </ThemedText>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -198,8 +266,9 @@ const styles = StyleSheet.create({
 // In the styles object
 // In the styles object
 title: {
-  fontSize: 42,
+  fontSize: 27,
   // **CHANGE THIS LINE**
+  // marginBottom:10,
   fontWeight: '800', // Changed from '900' to '800' (or 'bold')
   color: '#FF9500',
   letterSpacing: 0,
@@ -208,12 +277,19 @@ title: {
   borderWidth: 0,
   borderColor: 'transparent',
 },
-
+subtitle1: {
+  top: -70,
+  fontSize: 14,
+  color: '#FF9500',
+  marginTop: 4,
+  fontWeight: '400',
+},
   subtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    top: -70,
+    fontSize: 27,
+    color: '#FF9500',
     marginTop: 8,
-    fontWeight: '400',
+    fontWeight: '900',
   },
   formContainer: {
     gap: 20,
@@ -282,8 +358,77 @@ title: {
     marginTop: 40,
   },
   footerText: {
+    bottom: 50,
     fontSize: 12,
     color: 'rgba(255,255,255,0.4)',
     fontWeight: '400',
   },
+  footerText1: {
+    bottom: 119,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '400',
+  },
+  footerSubText: {
+    top: 150,
+    marginTop: 6,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '600',
+  },
+  footerSubText1: {
+    top: 105,
+    marginTop: 6,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '600',
+  },
+  // New: agreement row + link styles
+  footerAgreement: {
+    marginTop: 8,
+  },
+  footerAgreementText: {
+    bottom: 119, // keep close to existing layout offsets
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  linkText: {
+    textDecorationLine: 'underline',
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '600',
+  },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '80%',
+    backgroundColor: '#111',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  modalClose: { fontSize: 18, color: '#fff' },
+  modalBody: { paddingHorizontal: 16, paddingVertical: 12 },
+  modalText: { color: '#E5E7EB', fontWeight: '600', lineHeight: 20, fontSize: 13 },
 });

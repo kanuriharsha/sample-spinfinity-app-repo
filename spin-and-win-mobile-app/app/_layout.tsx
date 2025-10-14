@@ -8,7 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect } from 'react';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  // Force dark theme for the navigator
+  const colorScheme = 'dark' as const;
 
   useEffect(() => {
     // Load persisted theme pref
@@ -27,7 +28,7 @@ export default function RootLayout() {
   }, [colorScheme]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DarkTheme}>
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="dashboard" options={{ title: 'Results Analytics', headerShown: false }} />
@@ -35,7 +36,7 @@ export default function RootLayout() {
         <Stack.Screen name="rewards" options={{ headerShown: false }} />
         <Stack.Screen name="reports" options={{ headerShown: false }} />
       </Stack>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }

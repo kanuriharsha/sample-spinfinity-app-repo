@@ -32,6 +32,50 @@ export default function Reports() {
   const [avgOrderValue, setAvgOrderValue] = useState(0);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
+
+  // NEW: periodic refresh tick (real-time updates)
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Helpers for precise ranges
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  const startOfISOWeek = (d: Date) => {
+    const tmp = new Date(d);
+    const day = (tmp.getDay() + 6) % 7; // Mon=0..Sun=6
+    tmp.setDate(tmp.getDate() - day);
+    return startOfDay(tmp);
+  };
+  const endOfISOWeek = (d: Date) => {
+    const s = startOfISOWeek(d);
+    const e = new Date(s);
+    e.setDate(e.getDate() + 6);
+    return endOfDay(e);
+  };
+  const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+  // NEW: start of current year
+  const startOfYear = (d: Date) => new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
+
+  // Local date key in tz: returns YYYY-MM-DD
+  const localDateKey = (d: Date) => new Date(d).toLocaleDateString('en-CA', { timeZone: tz }); // NEW
+
+  // Build query by selected period
+  const buildQueryForPeriod = (period: 'daily' | 'weekly' | 'monthly') => {
+    const now = new Date();
+    if (period === 'daily') {
+      return { from: startOfDay(now).toISOString(), to: now.toISOString(), tz };
+    }
+    if (period === 'weekly') {
+      return { from: startOfISOWeek(now).toISOString(), to: now.toISOString(), tz };
+    }
+    // monthly: current year to now
+    const startOfYear = (d: Date) => new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
+    return { from: startOfYear(now).toISOString(), to: now.toISOString(), tz };
+  };
 
   useEffect(() => {
     (async () => {
@@ -44,24 +88,38 @@ export default function Reports() {
 
       try {
         setLoading(true);
-        const data = await fetchAnalytics({ apiUrl, creds, query: { rangeDays: 30 } });
-        
+        const query = buildQueryForPeriod(selectedPeriod);
+        const data = await fetchAnalytics({ apiUrl, creds, query });
+
         setDailyFinancial((data.dailyFinancial || []) as DailyFinancial[]);
         setWeeklyFinancial((data.weeklyFinancial || []) as WeeklyFinancial[]);
         setMonthlyFinancial((data.monthlyFinancial || []) as MonthlyFinancial[]);
         setTopReturning((data.topReturning || []) as TopReturning[]);
 
-        // Calculate summary stats
-        const dailyData = (data.dailyFinancial || []) as DailyFinancial[];
-        const revenue = dailyData.reduce((sum, day) => sum + (day.sales || 0), 0);
-        const spins = dailyData.reduce((sum, day) => sum + (day.spins || 0), 0);
-        const customers = dailyData.reduce((sum, day) => sum + (day.customers || 0), 0);
-        
+        // Summary tailored to selectedPeriod using tz-based keys
+        const now = new Date();
+        const todayKeyLocal = localDateKey(now);
+        const wsKey = localDateKey(startOfISOWeek(now));
+        const weKey = localDateKey(endOfISOWeek(now));
+
+        let summarySeries: any[] = [];
+        if (selectedPeriod === 'daily') {
+          summarySeries = (data.dailyFinancial || []).filter((r: any) => String(r.day) === todayKeyLocal);
+        } else if (selectedPeriod === 'weekly') {
+          summarySeries = (data.dailyFinancial || []).filter((r: any) => String(r.day) >= wsKey && String(r.day) <= weKey);
+        } else {
+          const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          summarySeries = (data.monthlyFinancial || []).filter((r: any) => String(r.month) === monthKey);
+        }
+
+        const revenue = summarySeries.reduce((sum, r: any) => sum + Number(r?.sales || 0), 0);
+        const spins = summarySeries.reduce((sum, r: any) => sum + Number(r?.spins || 0), 0);
+        const customers = summarySeries.reduce((sum, r: any) => sum + Number(r?.customers || 0), 0);
+
         setTotalRevenue(revenue);
         setTotalSpins(spins);
         setTotalCustomers(customers);
         setAvgOrderValue(customers > 0 ? revenue / customers : 0);
-
       } catch (e: any) {
         console.error('Reports error:', e);
         const msg = String(e?.message || '');
@@ -75,30 +133,39 @@ export default function Reports() {
         setLoading(false);
       }
     })();
-  }, [apiUrl, router, reloadKey]);
+  // add selectedPeriod and refreshTick for real-time + period-aware fetching
+  }, [apiUrl, router, selectedPeriod, refreshTick, reloadKey, tz]); // include tz
 
+  // Data shown in the list
   const getCurrentData = () => {
-    switch (selectedPeriod) {
-      case 'weekly': return weeklyFinancial.slice(-10);
-      case 'monthly': return monthlyFinancial.slice(-6);
-      default: return dailyFinancial.slice(-7);
+    const now = new Date();
+    const todayKeyLocal = localDateKey(now);
+    if (selectedPeriod === 'daily') {
+      return dailyFinancial.filter((r) => String(r.day) === todayKeyLocal);
     }
+    if (selectedPeriod === 'weekly') {
+      const wsKey = localDateKey(startOfISOWeek(now));
+      const weKey = localDateKey(endOfISOWeek(now));
+      return dailyFinancial.filter((r) => String(r.day) >= wsKey && String(r.day) <= weKey);
+    }
+    // Monthly view: only this year up to now (already fetched by query)
+    const yearPrefix = `${now.getFullYear()}-`;
+    return monthlyFinancial.filter((m) => String(m.month).startsWith(yearPrefix)).slice(-12);
   };
 
   const formatPeriod = (item: any): string => {
     if (!item) return 'N/A';
-    if (selectedPeriod === 'daily') {
-      const day = item.day;
-      if (!day) return 'N/A';
-      return String(day).substring(0, 10);
+    if (selectedPeriod === 'daily' || selectedPeriod === 'weekly') {
+      return String(item.day || '').substring(0, 10) || 'N/A';
     }
-    if (selectedPeriod === 'weekly') {
-      const week = item.week;
-      return `Week ${week || 'N/A'}`;
-    }
-    const month = item.month;
-    return String(month || 'N/A');
+    return String(item.month || 'N/A');
   };
+
+  // Period label for cards and headings
+  const periodLabel = useMemo(
+    () => (selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'This Week' : 'This Month'),
+    [selectedPeriod]
+  );
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
@@ -130,18 +197,17 @@ export default function Reports() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          
           {/* Summary Cards */}
           <View style={styles.summaryGrid}>
             <View style={styles.summaryCard}>
               <ThemedText style={styles.summaryIcon}>💰</ThemedText>
               <ThemedText style={styles.summaryValue}>₹{totalRevenue.toFixed(0)}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>Total Revenue</ThemedText>
+              <ThemedText style={styles.summaryLabel}>{periodLabel} Revenue</ThemedText>
             </View>
             <View style={styles.summaryCard}>
               <ThemedText style={styles.summaryIcon}>🎯</ThemedText>
               <ThemedText style={styles.summaryValue}>{totalSpins}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>Total Spins</ThemedText>
+              <ThemedText style={styles.summaryLabel}>{periodLabel} Spins</ThemedText>
             </View>
           </View>
 
@@ -149,12 +215,12 @@ export default function Reports() {
             <View style={styles.summaryCard}>
               <ThemedText style={styles.summaryIcon}>👥</ThemedText>
               <ThemedText style={styles.summaryValue}>{totalCustomers}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>Customers</ThemedText>
+              <ThemedText style={styles.summaryLabel}>{periodLabel} Customers</ThemedText>
             </View>
             <View style={styles.summaryCard}>
               <ThemedText style={styles.summaryIcon}>📈</ThemedText>
               <ThemedText style={styles.summaryValue}>₹{avgOrderValue.toFixed(0)}</ThemedText>
-              <ThemedText style={styles.summaryLabel}>Avg Order Value</ThemedText>
+              <ThemedText style={styles.summaryLabel}>{periodLabel} Avg Order Value</ThemedText>
             </View>
           </View>
 
@@ -184,22 +250,19 @@ export default function Reports() {
             <ThemedText style={styles.sectionTitle}>
               {selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)} Performance
             </ThemedText>
-            
+
             {getCurrentData().map((item, index) => {
-              // Ensure all values have fallbacks
               const sales = Number(item?.sales || 0);
               const spins = Number(item?.spins || 0);
               const customers = Number(item?.customers || 0);
               const income = Number(item?.income || 0);
               const discount = Number(item?.discount || 0);
-              
               return (
                 <View key={index} style={styles.financialCard}>
                   <View style={styles.financialHeader}>
                     <ThemedText style={styles.financialDate}>{formatPeriod(item)}</ThemedText>
                     <ThemedText style={styles.financialRevenue}>₹{sales.toFixed(0)}</ThemedText>
                   </View>
-                  
                   <View style={styles.financialStats}>
                     <View style={styles.financialStat}>
                       <ThemedText style={styles.statLabel}>Spins</ThemedText>
@@ -214,7 +277,6 @@ export default function Reports() {
                       <ThemedText style={[styles.statValue, { color: '#4ECDC4' }]}>₹{income.toFixed(0)}</ThemedText>
                     </View>
                   </View>
-
                   {discount > 0 && (
                     <View style={styles.discountRow}>
                       <ThemedText style={styles.discountLabel}>Discount Given:</ThemedText>
@@ -226,32 +288,76 @@ export default function Reports() {
             })}
           </View>
 
-          {/* Performance Insights */}
+          {/* Performance Insights (dynamic) */}
           <View style={styles.insightsContainer}>
-            <ThemedText style={styles.sectionTitle}>Performance Insights</ThemedText>
-            
-            <View style={styles.insightCard}>
-              <View style={styles.insightHeader}>
-                <ThemedText style={styles.insightIcon}>🔥</ThemedText>
-                <ThemedText style={styles.insightTitle}>Best Performing Day</ThemedText>
+            <ThemedText style={styles.sectionTitle}>
+              {selectedPeriod === 'daily'
+                ? 'Today Insights'
+                : selectedPeriod === 'weekly'
+                ? 'This Week Insights'
+                : 'Monthly Insights'}
+            </ThemedText>
+
+            {selectedPeriod === 'weekly' && (
+              <View style={styles.insightCard}>
+                <View style={styles.insightHeader}>
+                  <ThemedText style={styles.insightIcon}>🏆</ThemedText>
+                  <ThemedText style={styles.insightTitle}>Best Performing Day (This Week)</ThemedText>
+                </View>
+                <ThemedText style={styles.insightValue}>
+                  {(() => {
+                    const now = new Date();
+                    const ws = startOfISOWeek(now).getTime();
+                    const we = endOfISOWeek(now).getTime();
+                    const weekDays = dailyFinancial.filter((d) => {
+                      const t = new Date(d.day).getTime();
+                      return t >= ws && t <= we;
+                    });
+                    if (weekDays.length === 0) return 'No data';
+                    const best = weekDays.reduce((max, d) => (Number(d.sales || 0) > Number(max.sales || 0) ? d : max));
+                    return String(best.day).substring(0, 10);
+                  })()}
+                </ThemedText>
+                <ThemedText style={styles.insightDescription}>Highest revenue day in current week</ThemedText>
               </View>
-              <ThemedText style={styles.insightValue}>
-                {(() => {
-                  if (dailyFinancial.length === 0) return 'No data';
-                  
-                  const bestDay = dailyFinancial.reduce((max, day) => {
-                    const maxSales = Number(max?.sales || 0);
-                    const daySales = Number(day?.sales || 0);
-                    return daySales > maxSales ? day : max;
-                  });
-                  
-                  return bestDay?.day ? String(bestDay.day).substring(0, 10) : 'N/A';
-                })()}
-              </ThemedText>
-              <ThemedText style={styles.insightDescription}>
-                Highest revenue generating day
-              </ThemedText>
-            </View>
+            )}
+
+            {selectedPeriod === 'monthly' && (
+              <View style={styles.insightCard}>
+                <View style={styles.insightHeader}>
+                  <ThemedText style={styles.insightIcon}>📅</ThemedText>
+                  <ThemedText style={styles.insightTitle}>Best Performing Month (This Year)</ThemedText>
+                </View>
+                <ThemedText style={styles.insightValue}>
+                  {(() => {
+                    // Restrict to current year
+                    const now = new Date();
+                    const yearPrefix = `${now.getFullYear()}-`;
+                    const monthsThisYear = monthlyFinancial.filter((m) =>
+                      String(m.month || '').startsWith(yearPrefix)
+                    );
+                    if (monthsThisYear.length === 0) return 'No data';
+                    const best = monthsThisYear.reduce((max, m) =>
+                      Number(m.sales || 0) > Number(max.sales || 0) ? m : max
+                    );
+                    return String(best.month);
+                  })()}
+                </ThemedText>
+                <ThemedText style={styles.insightDescription}>Highest revenue month in the current year</ThemedText>
+              </View>
+            )}
+
+            {selectedPeriod === 'daily' && (
+              <View style={styles.insightCard}>
+                <View style={styles.insightHeader}>
+                  <ThemedText style={styles.insightIcon}>⏱️</ThemedText>
+                  <ThemedText style={styles.insightTitle}>Live Today</ThemedText>
+                </View>
+                <ThemedText style={styles.insightDescription}>
+                  Showing real-time performance for today only
+                </ThemedText>
+              </View>
+            )}
           </View>
 
           <View style={{ height: 100 }} />

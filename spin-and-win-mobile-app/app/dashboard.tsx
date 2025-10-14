@@ -14,7 +14,8 @@ const isWeb = Platform.OS === 'web';
 
 export default function Dashboard() {
   const router = useRouter();
-  const scheme = useColorScheme() ?? 'light';
+  // Force dashboard to dark only
+  const scheme: 'dark' = 'dark';
 
   // Auth/user
   const [user, setUser] = useState<{ username: string; routeName: string; displayRouteName?: string } | null>(null);
@@ -102,7 +103,19 @@ export default function Dashboard() {
     await AsyncStorage.setItem('theme_pref', next);
   };
 
-
+  // Today's label (weekday + date) for main page header
+  const todayLabel = useMemo(() => {
+    try {
+      return new Date().toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return new Date().toDateString();
+    }
+  }, []);
 
   // Add: simple refresh handler
   const onRefresh = () => setReloadKey((k) => k + 1);
@@ -136,7 +149,9 @@ export default function Dashboard() {
                 <ThemedText style={styles.appTitle}>PEH Spinfinity</ThemedText>
               </View>
             </View>
-            <ThemedText style={styles.headerSubtitle}>Analytics Dashboard</ThemedText>
+            {/* Replace generic subtitle with "Today's Dashboard" and show today's date */}
+            <ThemedText style={styles.headerSubtitle}>Today's Dashboard</ThemedText>
+            {/* <ThemedText style={styles.headerSubtle}>{todayLabel}</ThemedText> */}
             {user && (
               <ThemedText style={styles.headerSubtle}>
                 {user.displayRouteName ? (user.displayRouteName === 'all' ? 'All Shops' : user.displayRouteName) : (user.routeName === 'all' ? 'All Shops' : user.routeName)}
@@ -153,8 +168,10 @@ export default function Dashboard() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+          {/* Main page header: stacked left-aligned: Welcome -> Date -> Username */}
           <View style={styles.premiumHeader}>
             <ThemedText style={styles.premiumWelcome}>Welcome back!</ThemedText>
+            <ThemedText style={styles.premiumDate}>{todayLabel}</ThemedText>
             <ThemedText style={styles.premiumUser}>{user?.username || 'User'}</ThemedText>
           </View>
           <View style={styles.premiumGrid}>
@@ -193,7 +210,7 @@ export default function Dashboard() {
               </View>
               <View style={styles.performanceDivider} />
               <View style={styles.performanceItem}>
-                <ThemedText style={styles.performanceLabel}>Prizes</ThemedText>
+                <ThemedText style={styles.performanceLabel}>Rewards</ThemedText>
                 <ThemedText style={styles.performanceValue}>₹{todayPrizeAmount}</ThemedText>
               </View>
             </View>
@@ -265,7 +282,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   premiumHeader: {
-    alignItems: 'flex-start',
+    flexDirection: 'column',           // changed: stack vertically
+    alignItems: 'flex-start',           // changed: left align
+    justifyContent: 'flex-start',       // changed: start
     marginBottom: 18,
     marginTop: 10,
     paddingLeft: 4,
@@ -282,6 +301,12 @@ const styles = StyleSheet.create({
     color: '#FFB300',
     fontWeight: '700',
     marginBottom: 2,
+  },
+  premiumDate: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '700',
+    textAlign: 'left',                  // changed: left align date
   },
   premiumGrid: {
     flexDirection: 'row',
