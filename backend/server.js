@@ -79,11 +79,16 @@ async function basicAuth(req, res, next) {
 
     const user = await Login.findOne({ username: creds.username, password: creds.password });
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    if (String(user.access).toLowerCase() === 'disable') {
+      return res.status(403).json({ error: 'Your recharge is over, please recharge' });
+    }
 
     req.user = {
       username: creds.username,
       routeName: norm(user.routeName || 'all'),
       displayRouteName: user.routeName || 'all',
+      onboard: user.onboard,
+      access: user.access,
     };
     next();
   } catch (e) {
@@ -108,7 +113,13 @@ app.post('/api/login', async (req, res) => {
     const displayRouteName = user.routeName || 'all';
     const routeName = norm(displayRouteName) || 'all';
 
-    return res.json({ user: { username, routeName, displayRouteName } });
+      // Block login if access is 'disable'
+      if (String(user.access).toLowerCase() === 'disable') {
+        return res.status(403).json({ error: 'Your recharge is over, please recharge' });
+      }
+
+      // Pass onboard date for warning logic
+      return res.json({ user: { username, routeName, displayRouteName, onboard: user.onboard } });
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Server error' });

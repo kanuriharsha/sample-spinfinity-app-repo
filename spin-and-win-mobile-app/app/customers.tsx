@@ -9,10 +9,21 @@ import { BottomNavigation } from '@/components/BottomNavigation';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getApiUrl, fetchAnalytics, searchCustomers, fetchMonthlyCustomers, fetchCustomerDetails, type Customer, type MonthlyCustomers, type CustomerDetails } from '@/lib/mongo-queries';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import RechargeWarning from '@/components/RechargeWarning';
 
-export default function Customers() {
+function Customers() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'dark';
+  const [onboard, setOnboard] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    (async () => {
+      const userRaw = await AsyncStorage.getItem('auth_user');
+      if (userRaw) {
+        const user = JSON.parse(userRaw);
+        setOnboard(user.onboard);
+      }
+    })();
+  }, []);
 
   // Loading and reload
   const [loading, setLoading] = useState(true);
@@ -268,7 +279,8 @@ export default function Customers() {
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
+    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}> 
+      <RechargeWarning onboard={onboard} />
       <LinearGradient
         colors={['#0B1220', '#1E293B']}
         start={{ x: 0, y: 0 }}
@@ -635,3 +647,5 @@ const styles = StyleSheet.create({
   noResultsContainer: { padding: 40, alignItems: 'center' },
   noResultsText: { fontSize: 16, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
 });
+
+export default Customers;

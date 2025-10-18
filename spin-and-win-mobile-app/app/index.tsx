@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import RechargeWarning from '@/components/RechargeWarning';
 
 const { width, height } = Dimensions.get('window');
 
@@ -17,6 +18,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [onboard, setOnboard] = useState<string | undefined>(undefined);
   const bg = useThemeColor({}, 'background');
 
   const apiUrl = useMemo(() => {
@@ -26,7 +28,7 @@ export default function LoginScreen() {
     }
     
     // Try Constants for development
-    const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
+    const hostUri = Constants.expoConfig?.hostUri;
     if (hostUri) {
       const host = hostUri.split(':')[0];
       const actualHost = Platform.OS === 'android' && (host === 'localhost' || host === '127.0.0.1') 
@@ -69,7 +71,6 @@ export default function LoginScreen() {
       const res = await fetch(`${apiUrl}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Backend also accepts X-User/X-Password; body is enough for /api/login
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
@@ -78,6 +79,7 @@ export default function LoginScreen() {
       }
       await AsyncStorage.setItem('auth_creds', JSON.stringify({ username, password }));
       await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
+      setOnboard(data.user?.onboard); // Save onboard date for warning
       router.replace('/dashboard');
     } catch (e: unknown) {
       console.error('Login error:', e);
@@ -89,7 +91,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
+    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}> 
       <LinearGradient
         colors={['#1A1A1A', '#0A0A0A']}
         start={{ x: 0, y: 0 }}
@@ -100,6 +102,8 @@ export default function LoginScreen() {
         behavior={Platform.select({ ios: 'padding', android: 'height' })}
         style={styles.keyboardView}
       >
+        {/* Recharge warning */}
+        <RechargeWarning onboard={onboard} />
         {/* Header */}
         <View style={styles.headerWrap}>
           {/* <ThemedText style={styles.title}>PEH Spinfinity</ThemedText> */}

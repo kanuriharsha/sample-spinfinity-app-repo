@@ -10,10 +10,22 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getApiUrl, fetchAnalytics, type DailyFinancial, type WeeklyFinancial, type MonthlyFinancial, type TopReturning } from '@/lib/mongo-queries';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import RechargeWarning from '@/components/RechargeWarning';
 
 export default function Reports() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'dark';
+  const [onboard, setOnboard] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    (async () => {
+      const userRaw = await AsyncStorage.getItem('auth_user');
+      if (userRaw) {
+        const user = JSON.parse(userRaw);
+        setOnboard(user.onboard);
+      }
+    })();
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
@@ -200,13 +212,16 @@ export default function Reports() {
   );
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
+    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}> 
+      <RechargeWarning onboard={onboard} />
       <LinearGradient
         colors={['#0B1220', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
       >
+        {/* Recharge warning */}
+        <RechargeWarning onboard={onboard} />
         <View style={styles.header}>
           <View style={styles.headerInfo}>
             <View style={styles.titleRow}>
