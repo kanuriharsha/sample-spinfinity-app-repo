@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RechargeWarning from '@/components/RechargeWarning';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
@@ -31,6 +32,7 @@ export default function Rewards() {
   const [rewards, setRewards] = useState<RewardAnalysis[]>([]);
   const [totalSpins, setTotalSpins] = useState(0);
   const [totalRewardValue, setTotalRewardValue] = useState(0);
+  const [onboard, setOnboard] = useState<string | undefined>(undefined);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -102,6 +104,16 @@ export default function Rewards() {
 
         processedRewards.sort((a, b) => b.totalValue - a.totalValue);
         setRewards(processedRewards);
+      // Load onboard date for recharge warning
+      useEffect(() => {
+        (async () => {
+          const userRaw = await AsyncStorage.getItem('auth_user');
+          if (userRaw) {
+            const user = JSON.parse(userRaw);
+            setOnboard(user.onboard);
+          }
+        })();
+      }, []);
 
         const totalValue = processedRewards.reduce((sum, reward) => sum + reward.totalValue, 0);
         setTotalRewardValue(totalValue);
@@ -154,6 +166,7 @@ export default function Rewards() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
+      <RechargeWarning onboard={onboard} />
       <LinearGradient
         colors={['#0B1220', '#1E293B']}
         start={{ x: 0, y: 0 }}

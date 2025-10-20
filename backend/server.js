@@ -113,13 +113,13 @@ app.post('/api/login', async (req, res) => {
     const displayRouteName = user.routeName || 'all';
     const routeName = norm(displayRouteName) || 'all';
 
-      // Block login if access is 'disable'
-      if (String(user.access).toLowerCase() === 'disable') {
-        return res.status(403).json({ error: 'Your recharge is over, please recharge' });
-      }
+    // Block login if access is 'disable'
+    if (String(user.access).toLowerCase() === 'disable') {
+      return res.status(403).json({ error: 'Your recharge is over, please recharge', access: user.access, onboard: user.onboard, recharge: user.recharge });
+    }
 
-      // Pass onboard date for warning logic
-      return res.json({ user: { username, routeName, displayRouteName, onboard: user.onboard } });
+    // Pass onboard date, access, and recharge for warning logic
+    return res.json({ user: { username, routeName, displayRouteName, onboard: user.onboard, access: user.access, recharge: user.recharge } });
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Server error' });
@@ -197,26 +197,10 @@ const analyticsHandler = async (req, res) => {
           ts: {
             $switch: {
               branches: [{ case: { $eq: [{ $type: '$tsSource' }, 'date'] }, then: '$tsSource' }],
-              default: { $toDate: '$tsSource' },
             },
           },
         },
       },
-      { $match: { ts: { $ne: null } } },
-    ];
-
-    if (fromDate || toDate) {
-      const range = {};
-      if (fromDate) range.$gte = fromDate;
-      if (toDate) range.$lte = toDate;
-      base.push({ $match: { ts: range } });
-    }
-
-    if (allowedNorm) {
-      base.push({ $match: { __rn: allowedNorm } });
-    }
-
-    base.push(
       {
         $lookup: {
           from: 'login',
@@ -229,7 +213,7 @@ const analyticsHandler = async (req, res) => {
         },
       },
       { $match: { $expr: { $gt: [{ $size: '$loginMatches' }, 0] } } }
-    );
+    ];
 
     // Results distribution (prize/winner) with prizeAmount
     const byResult = await SpinResults.aggregate([
@@ -702,7 +686,7 @@ const analyticsHandler = async (req, res) => {
     console.error('analytics error:', e);
     res.status(500).json({ error: 'Server error' });
   }
-};
+}
 
 // Customer Details Endpoint - Get detailed spin history for a specific customer
 const customerDetailsHandler = async (req, res) => {
