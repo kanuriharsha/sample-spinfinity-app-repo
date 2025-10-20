@@ -153,7 +153,8 @@ async function parseJsonOrThrow(res: Response) {
 export async function fetchAnalytics(params: {
   apiUrl: string;
   creds: { username: string; password: string };
-  query?: { rangeDays?: number; from?: string; to?: string; tz?: string }; // added tz
+  // include optional routeName so client can request route-scoped analytics
+  query?: { rangeDays?: number; from?: string; to?: string; tz?: string; routeName?: string };
 }): Promise<AnalyticsResponse> {
   const { apiUrl, creds, query } = params;
 
@@ -179,6 +180,7 @@ export async function fetchAnalytics(params: {
     if (query?.from) sp.set('from', query.from);
     if (query?.to) sp.set('to', query.to);
     if (query?.tz) sp.set('tz', query.tz); // pass tz to server
+    if (query?.routeName) sp.set('routeName', String(query.routeName));
 
     res = await fetch(`${apiUrl}/api/analytics${sp.toString() ? `?${sp.toString()}` : ''}`, {
       method: 'GET',

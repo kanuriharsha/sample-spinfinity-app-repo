@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import RechargeWarning from '@/components/RechargeWarning';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
@@ -27,19 +26,22 @@ export default function Rewards() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'dark';
 
+  // NEW: store signed-in user's routeName to explicitly request route data
+  const [userRoute, setUserRoute] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('today');
   const [rewards, setRewards] = useState<RewardAnalysis[]>([]);
   const [totalSpins, setTotalSpins] = useState(0);
   const [totalRewardValue, setTotalRewardValue] = useState(0);
-  const [onboard, setOnboard] = useState<string | undefined>(undefined);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
-  // Helpers to build date range per filter
+  // --- Add missing helpers used by the effect below ---
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
   const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
   const buildQueryForFilter = (filter: TimeFilter) => {
     const now = new Date();
     if (filter === 'today') {
@@ -62,23 +64,36 @@ export default function Rewards() {
       const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
       return { from: lastMonthStart.toISOString(), to: lastMonthEnd.toISOString() };
     }
-    // 'all' => no date constraints (all time)
+    // 'all' => no date constraints
     return {};
   };
 
   useEffect(() => {
     (async () => {
+      // read auth_user and creds
       const credsRaw = await AsyncStorage.getItem('auth_creds');
+      const userRaw = await AsyncStorage.getItem('auth_user'); // NEW
       if (!credsRaw) {
         router.replace('/');
         return;
       }
+      if (userRaw) {
+        try {
+          const u = JSON.parse(userRaw);
+          // normalize routeName for display and queries
+          const rn = (u?.routeName || u?.displayRouteName || '').toString().trim();
+          setUserRoute(rn || null);
+        } catch {
+          setUserRoute(null);
+        }
+      }
+
       const creds = JSON.parse(credsRaw) as { username: string; password: string };
 
       try {
         setLoading(true);
-        // Build precise date range based on filter
-        const query = { ...buildQueryForFilter(timeFilter), tz }; // pass tz
+        // Build precise date range based on filter, include tz and user's routeName
+        const query = { ...buildQueryForFilter(timeFilter), tz, routeName: userRoute || undefined }; // pass explicit routeName
         const data = await fetchAnalytics({ apiUrl, creds, query });
         
         const byResult = data.byResult || [];
@@ -104,16 +119,6 @@ export default function Rewards() {
 
         processedRewards.sort((a, b) => b.totalValue - a.totalValue);
         setRewards(processedRewards);
-      // Load onboard date for recharge warning
-      useEffect(() => {
-        (async () => {
-          const userRaw = await AsyncStorage.getItem('auth_user');
-          if (userRaw) {
-            const user = JSON.parse(userRaw);
-            setOnboard(user.onboard);
-          }
-        })();
-      }, []);
 
         const totalValue = processedRewards.reduce((sum, reward) => sum + reward.totalValue, 0);
         setTotalRewardValue(totalValue);
@@ -131,7 +136,8 @@ export default function Rewards() {
         setLoading(false);
       }
     })();
-  }, [apiUrl, router, timeFilter, tz]); // REMOVED: refreshTick dependency
+  // include userRoute so changes reflect immediately after login/profile change
+  }, [apiUrl, router, timeFilter, tz, userRoute]); // include userRoute
 
   const cleanRewardName = (name: string): string => {
     // Clean up reward names for better display
@@ -166,7 +172,6 @@ export default function Rewards() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
-      <RechargeWarning onboard={onboard} />
       <LinearGradient
         colors={['#0B1220', '#1E293B']}
         start={{ x: 0, y: 0 }}
@@ -183,7 +188,10 @@ export default function Rewards() {
                 <ThemedText style={styles.appTitle}>Rewards Analysis</ThemedText>
               </View>
             </View>
-            <ThemedText style={styles.headerSubtitle}>{getFilterLabel(timeFilter)}</ThemedText>
+            {/* show which route's rewards are being displayed */}
+            <ThemedText style={styles.headerSubtitle}>
+              {userRoute ? `${getFilterLabel(timeFilter)}` : getFilterLabel(timeFilter)}
+            </ThemedText>
           </View>
         </View>
       </LinearGradient>

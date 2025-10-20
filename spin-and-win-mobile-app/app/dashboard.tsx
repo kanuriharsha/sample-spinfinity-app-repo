@@ -9,7 +9,6 @@ import { BottomNavigation } from '@/components/BottomNavigation';
 import { Colors } from '@/constants/theme';
 import { useColorScheme, setThemePreference, getThemePreference } from '@/hooks/use-color-scheme';
 import { getApiUrl, fetchAnalytics, type TopDaily } from '@/lib/mongo-queries';
-import RechargeWarning from '@/components/RechargeWarning';
 
 const isWeb = Platform.OS === 'web';
 
@@ -37,7 +36,6 @@ export default function Dashboard() {
 
   // Add: hamburger menu state (overlay) and query for search
   const [menuOpen, setMenuOpen] = useState(false);
-  const [onboard, setOnboard] = useState<string | undefined>(undefined);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // Detect user timezone
@@ -51,15 +49,7 @@ export default function Dashboard() {
         return;
       }
       const creds = JSON.parse(credsRaw) as { username: string; password: string };
-      if (u) {
-        const userObj = JSON.parse(u);
-        setUser(userObj);
-        if (String(userObj.access).toLowerCase() === 'disable') {
-          await AsyncStorage.multiRemove(['auth_creds', 'auth_user']);
-          Alert.alert('Recharge Required', 'Your recharge is over, please recharge.', [{ text: 'OK', onPress: () => router.replace('/') }]);
-          return;
-        }
-      }
+      if (u) setUser(JSON.parse(u));
 
       try {
         setLoading(true);
@@ -111,16 +101,6 @@ export default function Dashboard() {
     // Add reloadKey dependency for manual refresh
   }, [apiUrl, router, reloadKey, tz]);
 
-  useEffect(() => {
-    (async () => {
-      const userRaw = await AsyncStorage.getItem('auth_user');
-      if (userRaw) {
-        const user = JSON.parse(userRaw);
-        setOnboard(user.onboard);
-      }
-    })();
-  }, []);
-
   const logout = async () => {
     await AsyncStorage.multiRemove(['auth_creds', 'auth_user']);
     router.replace('/');
@@ -165,15 +145,14 @@ export default function Dashboard() {
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}> 
+    <ThemedView style={[styles.container, { backgroundColor: Colors[scheme].background }]}>
+      {/* ...existing header code... */}
       <LinearGradient
-        colors={['#0B1220', '#1E293B']}
+        colors={scheme === 'dark' ? ['#0B1220', '#1E293B'] : ['#7C3AED', '#06B6D4']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
       >
-        {/* Recharge warning */}
-        <RechargeWarning onboard={onboard} />
         {/* ...existing header code... */}
         <View style={styles.header}>
           <View style={styles.headerInfo}>
@@ -223,7 +202,7 @@ export default function Dashboard() {
           {/* ...existing premium grid cards... */}
           <View style={styles.premiumGrid}>
             <View style={styles.premiumCard}>
-              <ThemedText style={styles.premiumIcon}>🎯</ThemedText>
+              <ThemedText style={styles.premiumIcon}>↻</ThemedText>
               <ThemedText style={styles.premiumValue}>{todaySpins}</ThemedText>
               <ThemedText style={styles.premiumLabel}>Today's Spins</ThemedText>
             </View>
@@ -269,7 +248,7 @@ export default function Dashboard() {
           {recentSpins.length > 0 && (
             <View style={styles.recentSpinsCard}>
               <View style={styles.recentSpinsHeader}>
-                <ThemedText style={styles.recentSpinsTitle}> Recent Spins Today</ThemedText>
+                <ThemedText style={styles.recentSpinsTitle}>🎰 Recent Spins Today</ThemedText>
                 <ThemedText style={styles.recentSpinsCount}>{recentSpins.length} spins</ThemedText>
               </View>
               

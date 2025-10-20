@@ -79,16 +79,11 @@ async function basicAuth(req, res, next) {
 
     const user = await Login.findOne({ username: creds.username, password: creds.password });
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    if (String(user.access).toLowerCase() === 'disable') {
-      return res.status(403).json({ error: 'Your recharge is over, please recharge' });
-    }
 
     req.user = {
       username: creds.username,
       routeName: norm(user.routeName || 'all'),
       displayRouteName: user.routeName || 'all',
-      onboard: user.onboard,
-      access: user.access,
     };
     next();
   } catch (e) {
@@ -113,13 +108,7 @@ app.post('/api/login', async (req, res) => {
     const displayRouteName = user.routeName || 'all';
     const routeName = norm(displayRouteName) || 'all';
 
-    // Block login if access is 'disable'
-    if (String(user.access).toLowerCase() === 'disable') {
-      return res.status(403).json({ error: 'Your recharge is over, please recharge', access: user.access, onboard: user.onboard, recharge: user.recharge });
-    }
-
-    // Pass onboard date, access, and recharge for warning logic
-    return res.json({ user: { username, routeName, displayRouteName, onboard: user.onboard, access: user.access, recharge: user.recharge } });
+    return res.json({ user: { username, routeName, displayRouteName } });
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Server error' });
@@ -197,10 +186,26 @@ const analyticsHandler = async (req, res) => {
           ts: {
             $switch: {
               branches: [{ case: { $eq: [{ $type: '$tsSource' }, 'date'] }, then: '$tsSource' }],
+              default: { $toDate: '$tsSource' },
             },
           },
         },
       },
+      { $match: { ts: { $ne: null } } },
+    ];
+
+    if (fromDate || toDate) {
+      const range = {};
+      if (fromDate) range.$gte = fromDate;
+      if (toDate) range.$lte = toDate;
+      base.push({ $match: { ts: range } });
+    }
+
+    if (allowedNorm) {
+      base.push({ $match: { __rn: allowedNorm } });
+    }
+
+    base.push(
       {
         $lookup: {
           from: 'login',
@@ -213,7 +218,7 @@ const analyticsHandler = async (req, res) => {
         },
       },
       { $match: { $expr: { $gt: [{ $size: '$loginMatches' }, 0] } } }
-    ];
+    );
 
     // Results distribution (prize/winner) with prizeAmount
     const byResult = await SpinResults.aggregate([
@@ -377,20 +382,14 @@ const analyticsHandler = async (req, res) => {
       { $sort: { count: -1 } },
     ]).toArray();
 
-    // Visitors - Use sessionId as primary customer identifier, fallback to name|surname
+    // Visitors
     const visitorKeyAdd = {
       $addFields: {
         __vk: {
-          $cond: {
-            if: { $and: [{ $ne: ['$sessionId', null] }, { $ne: ['$sessionId', ''] }] },
-            then: { $toString: '$sessionId' },
-            else: {
-              $trim: {
-                input: {
-                  $toLower: {
-                    $concat: [{ $ifNull: ['$name', ''] }, '|', { $ifNull: ['$surname', ''] }],
-                  },
-                },
+          $trim: {
+            input: {
+              $toLower: {
+                $concat: [{ $ifNull: ['$name', ''] }, '|', { $ifNull: ['$surname', ''] }],
               },
             },
           },
@@ -608,58 +607,143 @@ const analyticsHandler = async (req, res) => {
     // Financial rollups (day/week/month) for charts
     const financialBase = [...base, ...amountPrep, ...discountPrep];
 
-    // Helper to add unique customer count per group
-    const addCustomersToGroup = (groupKey) => [
-      visitorKeyAdd,
-      { $match: { __vk: { $ne: '' } } },
+    // include unique customers per day (customers)
+    const dailyFinancial = await SpinResults.aggregate([
+      ...financialBase,
+      // derive visitor key for unique customer counting (uses same logic as elsewhere)
+      {
+        $addFields: {
+          __vk: {
+            $trim: {
+              input: {
+                $toLower: {
+                  $concat: [{ $ifNull: ['$name', ''] }, '|', { $ifNull: ['$surname', ''] }],
+                },
+              },
+            },
+          },
+        },
+      },
+      { $addFields: { day: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
       {
         $group: {
-          _id: groupKey,
+          _id: '$day',
           spins: { $sum: 1 },
           sales: { $sum: '$amountNum' },
           discount: { $sum: '$discountNum' },
-          uniqueCustomers: { $addToSet: '$__vk' }, // Collect unique customer keys
+          customersSet: { $addToSet: '$__vk' },
         },
       },
       {
         $project: {
           _id: 0,
-          [typeof groupKey === 'string' ? groupKey.replace('$', '') : 'period']: '$_id',
+          day: '$_id',
           spins: 1,
           sales: { $round: ['$sales', 2] },
           discount: { $round: ['$discount', 2] },
           income: { $round: [{ $subtract: ['$sales', '$discount'] }, 2] },
-          customers: { $size: '$uniqueCustomers' }, // Count unique customers
+          // exclude empty-string visitor keys
+          customers: {
+            $size: {
+              $filter: { input: '$customersSet', as: 'c', cond: { $ne: ['$$c', ''] } },
+            },
+          },
         },
       },
-    ];
-
-    const dailyFinancial = await SpinResults.aggregate([
-      ...financialBase,
-      { $addFields: { day: { $dateToString: { date: '$ts', format: '%Y-%m-%d', timezone: tz } } } },
-      ...addCustomersToGroup('$day'),
       { $sort: { day: 1 } },
       { $limit: 30 },
     ]).toArray();
 
+    // weekly financial with unique customers per week
     const weeklyFinancial = await SpinResults.aggregate([
       ...financialBase,
       {
         $addFields: {
-          week: {
-            $dateToString: { date: '$ts', format: '%G-W%V', timezone: tz },
+          __vk: {
+            $trim: {
+              input: {
+                $toLower: {
+                  $concat: [{ $ifNull: ['$name', ''] }, '|', { $ifNull: ['$surname', ''] }],
+                },
+              },
+            },
           },
         },
       },
-      ...addCustomersToGroup('$week'),
+      {
+        $addFields: {
+          week: { $dateToString: { date: '$ts', format: '%G-W%V', timezone: tz } },
+        },
+      },
+      {
+        $group: {
+          _id: '$week',
+          spins: { $sum: 1 },
+          sales: { $sum: '$amountNum' },
+          discount: { $sum: '$discountNum' },
+          customersSet: { $addToSet: '$__vk' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          week: '$_id',
+          spins: 1,
+          sales: { $round: ['$sales', 2] },
+          discount: { $round: ['$discount', 2] },
+          income: { $round: [{ $subtract: ['$sales', '$discount'] }, 2] },
+          customers: {
+            $size: {
+              $filter: { input: '$customersSet', as: 'c', cond: { $ne: ['$$c', ''] } },
+            },
+          },
+        },
+      },
       { $sort: { week: 1 } },
       { $limit: 26 },
     ]).toArray();
 
+    // monthly financial with unique customers per month
     const monthlyFinancial = await SpinResults.aggregate([
       ...financialBase,
+      {
+        $addFields: {
+          __vk: {
+            $trim: {
+              input: {
+                $toLower: {
+                  $concat: [{ $ifNull: ['$name', ''] }, '|', { $ifNull: ['$surname', ''] }],
+                },
+              },
+            },
+          },
+        },
+      },
       { $addFields: { month: { $dateToString: { date: '$ts', format: '%Y-%m', timezone: tz } } } },
-      ...addCustomersToGroup('$month'),
+      {
+        $group: {
+          _id: '$month',
+          spins: { $sum: 1 },
+          sales: { $sum: '$amountNum' },
+          discount: { $sum: '$discountNum' },
+          customersSet: { $addToSet: '$__vk' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          month: '$_id',
+          spins: 1,
+          sales: { $round: ['$sales', 2] },
+          discount: { $round: ['$discount', 2] },
+          income: { $round: [{ $subtract: ['$sales', '$discount'] }, 2] },
+          customers: {
+            $size: {
+              $filter: { input: '$customersSet', as: 'c', cond: { $ne: ['$$c', ''] } },
+            },
+          },
+        },
+      },
       { $sort: { month: 1 } },
       { $limit: 12 },
     ]).toArray();
@@ -686,7 +770,7 @@ const analyticsHandler = async (req, res) => {
     console.error('analytics error:', e);
     res.status(500).json({ error: 'Server error' });
   }
-}
+};
 
 // Customer Details Endpoint - Get detailed spin history for a specific customer
 const customerDetailsHandler = async (req, res) => {

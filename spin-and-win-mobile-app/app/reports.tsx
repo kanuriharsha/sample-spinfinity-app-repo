@@ -10,22 +10,13 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getApiUrl, fetchAnalytics, type DailyFinancial, type WeeklyFinancial, type MonthlyFinancial, type TopReturning } from '@/lib/mongo-queries';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import RechargeWarning from '@/components/RechargeWarning';
 
 export default function Reports() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'dark';
-  const [onboard, setOnboard] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    (async () => {
-      const userRaw = await AsyncStorage.getItem('auth_user');
-      if (userRaw) {
-        const user = JSON.parse(userRaw);
-        setOnboard(user.onboard);
-      }
-    })();
-  }, []);
+  // NEW: user's route for route-scoped reports
+  const [userRoute, setUserRoute] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
@@ -42,7 +33,6 @@ export default function Reports() {
   const [totalSpins, setTotalSpins] = useState(0);
   const [totalCustomers, setTotalCustomers] = useState(0);
   const [avgOrderValue, setAvgOrderValue] = useState(0);
-  const [totalRewardValue, setTotalRewardValue] = useState(0);
 
   const apiUrl = useMemo(() => getApiUrl(), []);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []); // NEW
@@ -93,30 +83,30 @@ export default function Reports() {
   useEffect(() => {
     (async () => {
       const credsRaw = await AsyncStorage.getItem('auth_creds');
+      const userRaw = await AsyncStorage.getItem('auth_user'); // NEW
       if (!credsRaw) {
         router.replace('/');
         return;
+      }
+      if (userRaw) {
+        try {
+          const u = JSON.parse(userRaw);
+          setUserRoute((u?.routeName || u?.displayRouteName || '').toString().trim() || null);
+        } catch {
+          setUserRoute(null);
+        }
       }
       const creds = JSON.parse(credsRaw) as { username: string; password: string };
 
       try {
         setLoading(true);
-        const query = buildQueryForPeriod(selectedPeriod);
+        const query = { ...buildQueryForPeriod(selectedPeriod), tz, routeName: userRoute || undefined }; // include routeName
         const data = await fetchAnalytics({ apiUrl, creds, query });
 
         setDailyFinancial((data.dailyFinancial || []) as DailyFinancial[]);
         setWeeklyFinancial((data.weeklyFinancial || []) as WeeklyFinancial[]);
         setMonthlyFinancial((data.monthlyFinancial || []) as MonthlyFinancial[]);
         setTopReturning((data.topReturning || []) as TopReturning[]);
-
-        // Calculate reward value from byResult data
-        const byResult = data.byResult || [];
-        const rewardValue = byResult.reduce((sum: number, item: any) => {
-          const occurrences = item.count || 0;
-          const prizeAmount = item.prizeAmount || 0;
-          return sum + (occurrences * prizeAmount);
-        }, 0);
-        setTotalRewardValue(rewardValue);
 
         // Summary tailored to selectedPeriod using tz-based keys
         const now = new Date();
@@ -177,8 +167,8 @@ export default function Reports() {
         setLoading(false);
       }
     })();
-  // add selectedPeriod and refreshTick for real-time + period-aware fetching
-  }, [apiUrl, router, selectedPeriod, refreshTick, reloadKey, tz]); // include tz
+  // add userRoute to deps so report re-fetches if route changes
+  }, [apiUrl, router, selectedPeriod, reloadKey, tz, userRoute]); // include userRoute
 
   // Data shown in the list
   const getCurrentData = () => {
@@ -212,16 +202,13 @@ export default function Reports() {
   );
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}> 
-      <RechargeWarning onboard={onboard} />
+    <ThemedView style={[styles.container, { backgroundColor: '#000' }]}>
       <LinearGradient
         colors={['#0B1220', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
       >
-        {/* Recharge warning */}
-        <RechargeWarning onboard={onboard} />
         <View style={styles.header}>
           <View style={styles.headerInfo}>
             <View style={styles.titleRow}>
@@ -232,7 +219,9 @@ export default function Reports() {
                 <ThemedText style={styles.appTitle}>Reports</ThemedText>
               </View>
             </View>
-            <ThemedText style={styles.headerSubtitle}>Financial Performance & Insights</ThemedText>
+            <ThemedText style={styles.headerSubtitle}>
+              {userRoute ? `Financial Performance` : 'Financial Performance & Insights'}
+            </ThemedText>
           </View>
         </View>
       </LinearGradient>
@@ -258,41 +247,18 @@ export default function Reports() {
             </View>
           </View>
 
-          {/* Show Customers and Avg Order Value only for Daily view */}
-          {selectedPeriod === 'daily' && (
-            <>
-              <View style={styles.summaryGrid}>
-                <View style={styles.summaryCard}>
-                  <ThemedText style={styles.summaryIcon}>👥</ThemedText>
-                  <ThemedText style={styles.summaryValue}>{totalCustomers}</ThemedText>
-                  <ThemedText style={styles.summaryLabel}>{periodLabel} Customers</ThemedText>
-                </View>
-                <View style={styles.summaryCard}>
-                  <ThemedText style={styles.summaryIcon}>📈</ThemedText>
-                  <ThemedText style={styles.summaryValue}>₹{avgOrderValue.toFixed(0)}</ThemedText>
-                  <ThemedText style={styles.summaryLabel}>{periodLabel} Avg Order Value</ThemedText>
-                </View>
-              </View>
-              <View style={styles.summaryGrid}>
-                <View style={styles.summaryCard}>
-                  <ThemedText style={styles.summaryIcon}>🎁</ThemedText>
-                  <ThemedText style={styles.summaryValue}>₹{totalRewardValue.toFixed(0)}</ThemedText>
-                  <ThemedText style={styles.summaryLabel}>{periodLabel} Reward Value</ThemedText>
-                </View>
-              </View>
-            </>
-          )}
-
-          {/* Show Reward Value for Weekly and Monthly views */}
-          {selectedPeriod !== 'daily' && (
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryCard}>
-                <ThemedText style={styles.summaryIcon}>🎁</ThemedText>
-                <ThemedText style={styles.summaryValue}>₹{totalRewardValue.toFixed(0)}</ThemedText>
-                <ThemedText style={styles.summaryLabel}>{periodLabel} Reward Value</ThemedText>
-              </View>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCard}>
+              <ThemedText style={styles.summaryIcon}>👥</ThemedText>
+              <ThemedText style={styles.summaryValue}>{totalCustomers}</ThemedText>
+              <ThemedText style={styles.summaryLabel}>{periodLabel} Customers</ThemedText>
             </View>
-          )}
+            <View style={styles.summaryCard}>
+              <ThemedText style={styles.summaryIcon}>📈</ThemedText>
+              <ThemedText style={styles.summaryValue}>₹{avgOrderValue.toFixed(0)}</ThemedText>
+              <ThemedText style={styles.summaryLabel}>{periodLabel} Avg Order Value</ThemedText>
+            </View>
+          </View>
 
           {/* Period Selector */}
           <View style={styles.periodSelector}>
@@ -338,12 +304,10 @@ export default function Reports() {
                       <ThemedText style={styles.statLabel}>Spins</ThemedText>
                       <ThemedText style={styles.statValue}>{spins}</ThemedText>
                     </View>
-                    {selectedPeriod === 'daily' && (
-                      <View style={styles.financialStat}>
-                        <ThemedText style={styles.statLabel}>Customers</ThemedText>
-                        <ThemedText style={styles.statValue}>{totalCustomers}</ThemedText>
-                      </View>
-                    )}
+                    <View style={styles.financialStat}>
+                      <ThemedText style={styles.statLabel}>Customers</ThemedText>
+                      <ThemedText style={styles.statValue}>{customers}</ThemedText>
+                    </View>
                     <View style={styles.financialStat}>
                       <ThemedText style={styles.statLabel}>Income</ThemedText>
                       <ThemedText style={[styles.statValue, { color: '#4ECDC4' }]}>₹{income.toFixed(0)}</ThemedText>
